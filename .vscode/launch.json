@@ -1,0 +1,30 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Causal Analysis",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "causal_analysis.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Visualization",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "visualization.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python Debugger: Current File with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": "${command:pickArgs}"
+        }
+    ]
+}
