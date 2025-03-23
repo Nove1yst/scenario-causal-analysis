@@ -1,6 +1,8 @@
 import numpy as np
 import warnings
 
+motor_vehicles = {'car', 'bus', 'truck'}
+non_motor_vehicles = {'bicycle', 'tricycle', 'motorcycle'}
 
 def line(point0, point1):
     '''
@@ -68,34 +70,52 @@ def getpoints(samples, front_rear_only=False):
     Get the four points of the bounding box of vehicles i and j.
     '''
     # vehicle i
+    type_i = samples['type_i'].values
     heading_i = samples[['hx_i','hy_i']].values
     perp_heading_i = np.array([-heading_i[:,1], heading_i[:,0]]).T
     heading_scale_i = np.tile(np.sqrt(heading_i[:,0]**2+heading_i[:,1]**2), (2,1)).T
-    length_i = np.tile(samples.length_i.values, (2,1)).T
-    width_i = np.tile(samples.width_i.values, (2,1)).T
 
-    point_up_i = samples[['x_i','y_i']].values + heading_i/heading_scale_i*length_i/2
-    point_down_i = samples[['x_i','y_i']].values - heading_i/heading_scale_i*length_i/2
-    if not front_rear_only:
-        point_i1 = (point_up_i + perp_heading_i/heading_scale_i*width_i/2).T
-        point_i2 = (point_up_i - perp_heading_i/heading_scale_i*width_i/2).T
-        point_i3 = (point_down_i + perp_heading_i/heading_scale_i*width_i/2).T
-        point_i4 = (point_down_i - perp_heading_i/heading_scale_i*width_i/2).T
+    if type_i == 'pedestrian':
+        point_i1 = samples[['x_i','y_i']].values.T
+        point_i2 = samples[['x_i','y_i']].values.T
+        point_i3 = samples[['x_i','y_i']].values.T
+        point_i4 = samples[['x_i','y_i']].values.T
+        point_up_i = samples[['x_i','y_i']].values
+        point_down_i = samples[['x_i','y_i']].values
+    else:
+        length_i = np.tile(samples.length_i.values, (2,1)).T
+        width_i = np.tile(samples.width_i.values, (2,1)).T
+        point_up_i = samples[['x_i','y_i']].values + heading_i/heading_scale_i*length_i/2
+        point_down_i = samples[['x_i','y_i']].values - heading_i/heading_scale_i*length_i/2
+        if not front_rear_only:
+            point_i1 = (point_up_i + perp_heading_i/heading_scale_i*width_i/2).T
+            point_i2 = (point_up_i - perp_heading_i/heading_scale_i*width_i/2).T
+            point_i3 = (point_down_i + perp_heading_i/heading_scale_i*width_i/2).T
+            point_i4 = (point_down_i - perp_heading_i/heading_scale_i*width_i/2).T
 
     # vehicle j
+    type_j = samples['type_j'].values
     heading_j = samples[['hx_j','hy_j']].values
     perp_heading_j = np.array([-heading_j[:,1], heading_j[:,0]]).T
     heading_scale_j= np.tile(np.sqrt(heading_j[:,0]**2+heading_j[:,1]**2), (2,1)).T
-    length_j = np.tile(samples.length_j.values, (2,1)).T
-    width_j = np.tile(samples.width_j.values, (2,1)).T
 
-    point_up_j = samples[['x_j','y_j']].values + heading_j/heading_scale_j*length_j/2
-    point_down_j = samples[['x_j','y_j']].values - heading_j/heading_scale_j*length_j/2
-    if not front_rear_only:
-        point_j1 = (point_up_j + perp_heading_j/heading_scale_j*width_j/2).T
-        point_j2 = (point_up_j - perp_heading_j/heading_scale_j*width_j/2).T
-        point_j3 = (point_down_j + perp_heading_j/heading_scale_j*width_j/2).T
-        point_j4 = (point_down_j - perp_heading_j/heading_scale_j*width_j/2).T
+    if type_j == 'pedestrian':
+        point_j1 = samples[['x_j','y_j']].values.T
+        point_j2 = samples[['x_j','y_j']].values.T
+        point_j3 = samples[['x_j','y_j']].values.T
+        point_j4 = samples[['x_j','y_j']].values.T
+        point_up_j = samples[['x_j','y_j']].values
+        point_down_j = samples[['x_j','y_j']].values
+    else:
+        length_j = np.tile(samples.length_j.values, (2,1)).T
+        width_j = np.tile(samples.width_j.values, (2,1)).T
+        point_up_j = samples[['x_j','y_j']].values + heading_j/heading_scale_j*length_j/2
+        point_down_j = samples[['x_j','y_j']].values - heading_j/heading_scale_j*length_j/2
+        if not front_rear_only:
+            point_j1 = (point_up_j + perp_heading_j/heading_scale_j*width_j/2).T
+            point_j2 = (point_up_j - perp_heading_j/heading_scale_j*width_j/2).T
+            point_j3 = (point_down_j + perp_heading_j/heading_scale_j*width_j/2).T
+            point_j4 = (point_down_j - perp_heading_j/heading_scale_j*width_j/2).T
 
     if front_rear_only:
         return (point_up_i, point_down_i, point_up_j, point_down_j)

@@ -15,13 +15,14 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from matplotlib.animation import FuncAnimation
 from matplotlib.patches import FancyArrowPatch
+import networkx as nx
 
 sys.path.append(os.getcwd())
 from ssm.src.longitudinal_ssms import TTC, DRAC, PSD
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
 # from utils.collision_utils import calculate_vehicle_bbox
-from utils.visualization_utils import draw_vehicle, calculate_four_points, plot_vehicle_positions
+from utils.visualization_utils import visualize_causal_graph
 
 FRAME_RATE = 20
 TIME_STEP = 1.0 / FRAME_RATE
@@ -35,7 +36,7 @@ DRAC_CRITICAL_THRESHOLD = 4.0   # DRAC critical threshold, for considerable reac
 PSD_CRITICAL_THRESHOLD = 1.5    # PSD critical threshold, for scenario classification
 TADV_CRITICAL_THRESHOLD = 3.0   # TADV critical threshold, for scenario classification
 ACT_CRITICAL_THRESHOLD = 0.5    # ACT critical threshold, for scenario classification
-DISTANCE_CRITICAL_THRESHOLD = 20  # Distance critical threshold
+# DISTANCE_CRITICAL_THRESHOLD = 20  # Distance critical threshold
 
 TTC_NORMAL_THRESHOLD = 10.0
 DRAC_NORMAL_THRESHOLD = 10.0
@@ -51,9 +52,10 @@ ego_id_dict = {
     '8_10_2 R19': [75, 112, 126, 178],
     '8_11_1 R20': [4, 9, 37, 57, 60, 80, 84, 87, 93, 109, 159, 160, 161, 175, 216, 219, 289, 295, 316, 333, 372, 385, 390, 400, 479]
 }
+safety_metrics_list = ['ttc', 'drac', 'psd', 'tadv', 'ttc2d', 'act']
 
 class CausalAnalyzer:
-    def __init__(self, data_dir, output_dir=None, debug=False):
+    def __init__(self, data_dir, output_dir=None):
         """
         Args:
             data_dir: 数据目录路径
@@ -64,7 +66,6 @@ class CausalAnalyzer:
         os.makedirs(self.output_dir, exist_ok=True)
         
         self.load_data()
-        self.debug = debug
         
     def load_data(self):
         with open(os.path.join(self.data_dir, "track_change_tj.pkl"), "rb") as f:
@@ -103,10 +104,6 @@ class CausalAnalyzer:
             return None, None
         start_frame = self.tp_info[fragment_id][ego_id]['State']['frame_id'].iloc[0]
         end_frame = self.tp_info[fragment_id][ego_id]['State']['frame_id'].iloc[-1]
-
-        # Debug
-        if self.debug:
-            end_frame = np.min([start_frame + 20, self.tp_info[fragment_id][ego_id]['State']['frame_id'].iloc[-1]])
         anomalies_frame_id = track['track_info']['frame_id'][np.where(track['anomalies'] == True)[0]]
         start_frame = np.max([start_frame, np.min(anomalies_frame_id) - 10])
         end_frame = np.min([end_frame, np.max(anomalies_frame_id) + 10])
@@ -135,28 +132,13 @@ class CausalAnalyzer:
         if df is None:
             return None
         num_timesteps = len(df)
-        num_agents = len(df[0].keys())
-        longitudinal_jerk = np.zeros((num_timesteps-1, num_agents))
-        lateral_jerk = np.zeros((num_timesteps-1, num_agents))
-
-        # Calculate the jerk of each agent for anomaly classification
-        for t in range(num_timesteps-1):
-            for tp_id in df[t].keys():
-                if tp_id in df[t+1].keys():
-                    time_step = df[t+1][tp_id]['timestamp_ms'] - df[t][tp_id]['timestamp_ms'] / 1000.0
-                    longitudinal_jerk[t] = (df[t+1][tp_id]['a_lon'] - df[t][tp_id]['a_lon']) / time_step
-                    lateral_jerk[t] = (df[t+1][tp_id]['a_lat'] - df[t][tp_id]['a_lat']) / time_step
-                    df[t][tp_id]['longitudinal_jerk'] = longitudinal_jerk[t]
-                    df[t][tp_id]['lateral_jerk'] = lateral_jerk[t]
         
         # TODO: detect the type of anomaly
         # for anomaly_frame in anomalies_frames:
         #     df_anomaly = df[anomaly_frame]
 
-        #     # 计算SSM指标
         distance_values = {}
         ttc_values = {}
-        # ttc_min = np.full((num_timesteps, num_agents), np.inf)
         drac_values = {}
         psd_values = {}
         tadv_values = {}
@@ -165,7 +147,6 @@ class CausalAnalyzer:
 
         start_frame = {}
         start_frame[ego_id] = ego_start_frame
-        # drac_max = np.full((num_timesteps, num_agents), 0.0)
         
         # Calculate the SSM metrics for ego vehicle
         for t in range(num_timesteps):
@@ -183,7 +164,7 @@ class CausalAnalyzer:
                     'hy_i': [np.sin(df[t][tp_id]['heading_rad'])],
                     'length_i': [df[t][tp_id]['length']],
                     'width_i': [df[t][tp_id]['width']],
-                    'type_i': [df[t][tp_id]['type']],
+                    'type_i': [df[t][tp_id]['agent_type']],
                     'x_j': [df[t][j]['x']],
                     'y_j': [df[t][j]['y']],
                     'vx_j': [df[t][j]['vx']],
@@ -192,7 +173,7 @@ class CausalAnalyzer:
                     'hy_j': [np.sin(df[t][j]['heading_rad'])],
                     'length_j': [df[t][j]['length']],
                     'width_j': [df[t][j]['width']],
-                    'type_j': [df[t][j]['type']]
+                    'type_j': [df[t][j]['agent_type']]
                 })
 
                 # Calculate the distance between the two agents
@@ -211,7 +192,6 @@ class CausalAnalyzer:
                     ttc_values[tp_id].append(ttc_result[0])
                 else:
                     ttc_values[tp_id] = [ttc_result[0]]
-                    start_frame[tp_id] = ego_start_frame + t
                 if tp_id in drac_values.keys():
                     drac_values[tp_id].append(drac_result[0])
                 else:
@@ -224,6 +204,7 @@ class CausalAnalyzer:
                     tadv_values[tp_id].append(tadv_result[0])
                 else:
                     tadv_values[tp_id] = [tadv_result[0]]
+                    start_frame[tp_id] = ego_start_frame + t
                 if tp_id in ttc2d_values.keys():
                     ttc2d_values[tp_id].append(ttc2d_result[0])
                 else:
@@ -236,13 +217,7 @@ class CausalAnalyzer:
                     distance_values[tp_id].append(distance[0])
                 else:
                     distance_values[tp_id] = [distance[0]]
-            # # 计算最小TTC和最大DRAC
-            # other_vehicles = [j for j in range(num_agents) if j != i]
-            # if other_vehicles:
-            #     ttc_min[t, i] = np.min(ttc_values[t, i, other_vehicles])
-            #     drac_max[t, i] = np.max(drac_values[t, i, other_vehicles])
         
-        # 汇总安全指标
         safety_metrics = {
             "ego_id": ego_id,
             "fragment_id": fragment_id,
@@ -298,12 +273,6 @@ class CausalAnalyzer:
         # # 计算危险接近事件（距离低于阈值）
         # dangerous_proximity_threshold = 5.0  # 米
         # dangerous_proximity_events = min_distances < dangerous_proximity_threshold
-        
-        # # 计算急加加速事件（加加速度超过阈值）
-        # risky_jerk_threshold_longitudinal = LONJ_THRESHOLD  # m/s³
-        # risky_jerk_threshold_lateral = LATJ_THRESHOLD  # m/s³
-        # risky_longitudinal_jerk_events = np.abs(longitudinal_jerk) > risky_jerk_threshold_longitudinal
-        # risky_lateral_jerk_events = np.abs(lateral_jerk) > risky_jerk_threshold_lateral
     
     def visualize_safety_metrics(self, safety_metrics):
         """
@@ -406,7 +375,9 @@ class CausalAnalyzer:
                 ax.axvline(x=frame, color='r', linestyle='--', alpha=0.5)
     
         plt.tight_layout()
-        plt.savefig(os.path.join(self.output_dir, f"ssm_{safety_metrics['fragment_id']}_{safety_metrics['ego_id']}.png"))
+        save_path = os.path.join(self.output_dir, f"{safety_metrics['fragment_id']}_{safety_metrics['ego_id']}")
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, f"ssm_{safety_metrics['fragment_id']}_{safety_metrics['ego_id']}.png"))
         plt.close()
         plt.show()
     
@@ -470,13 +441,11 @@ class CausalAnalyzer:
         axs[0, 0].set_title(f'Longitudinal Acceleration')
         axs[0, 0].set_xlabel('Frame')
         axs[0, 0].set_ylabel('Acceleration (m/s²)')
-        axs[0, 0].grid(True)
         # 标记异常帧
         if len(anomaly_frames) > 0:
             axs[0, 0].scatter(anomaly_frames, 
                             a_lon[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        axs[0, 0].legend()
         
         # # 标记急刹车和急加速事件
         # braking_events = range(start_frame, end_frame+1)[hard_braking_events]
@@ -497,20 +466,6 @@ class CausalAnalyzer:
         # axs[0, 0].text(0, LON_ACC_THRESHOLD+0.5, f'Comfort threshold (±{LON_ACC_THRESHOLD} m/s²)', color='r', alpha=0.7)
         # axs[0, 0].legend()
         
-        # 2. 横向加速度图
-        axs[0, 1].plot(range(start_frame, end_frame+1), a_lat, 'g-', label='Lateral')
-        axs[0, 1].set_title(f'Lateral Acceleration')
-        axs[0, 1].set_xlabel('Frame')
-        axs[0, 1].set_ylabel('Acceleration (m/s²)')
-        axs[0, 1].grid(True)
-
-        # 标记异常帧
-        if len(anomaly_frames) > 0:
-            axs[0, 1].scatter(anomaly_frames, 
-                            a_lat[anomaly_frames - start_frame], 
-                            color='red', marker='x', s=100, label='Anomaly Frames')
-        axs[0, 1].legend()
-        
         # # 标记急转弯事件
         # turning_events = time_steps[hard_turning_events]
         # if len(turning_events) > 0:
@@ -522,98 +477,253 @@ class CausalAnalyzer:
         # axs[0, 1].axhline(y=LAT_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
         # axs[0, 1].axhline(y=-LAT_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
         # axs[0, 1].text(0, LAT_ACC_THRESHOLD+0.5, f'Comfort threshold (±{LAT_ACC_THRESHOLD} m/s²)', color='r', alpha=0.7)
-        # axs[0, 1].legend()
         
-        # 3. 纵向加加速度图
-        axs[1, 0].plot(range(start_frame, end_frame), longitudinal_jerk, 'b-', label='Longitudinal')
-        axs[1, 0].set_title(f'Longitudinal Jerk')
-        axs[1, 0].set_xlabel('Frame')
-        axs[1, 0].set_ylabel('Jerk (m/s³)')
-        axs[1, 0].grid(True)
+        # 2. 纵向加加速度图
+        axs[0, 1].plot(range(start_frame, end_frame), longitudinal_jerk, 'b-', label='Longitudinal')
+        axs[0, 1].set_title(f'Longitudinal Jerk')
+        axs[0, 1].set_xlabel('Frame')
+        axs[0, 1].set_ylabel('Jerk (m/s³)')
 
         # 标记异常帧
         if len(anomaly_frames) > 0:
-            axs[1, 0].scatter(anomaly_frames, 
+            axs[0, 1].scatter(anomaly_frames, 
                             longitudinal_jerk[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        axs[1, 0].legend()
         # # 添加舒适阈值线
         # axs[1, 0].axhline(y=LONJ_THRESHOLD, color='r', linestyle='--', alpha=0.5)
         # axs[1, 0].axhline(y=-LONJ_THRESHOLD, color='r', linestyle='--', alpha=0.5)
         # axs[1, 0].text(0, LONJ_THRESHOLD+0.5, f'Comfort threshold (±{LONJ_THRESHOLD} m/s³)', color='r', alpha=0.7)
         # axs[1, 0].legend()
 
+         # 3. 横向加速度图
+        axs[1, 0].plot(range(start_frame, end_frame+1), a_lat, 'g-', label='Lateral')
+        axs[1, 0].set_title(f'Lateral Acceleration')
+        axs[1, 0].set_xlabel('Frame')
+        axs[1, 0].set_ylabel('Acceleration (m/s²)')
+
+        # 标记异常帧
+        if len(anomaly_frames) > 0:
+            axs[1, 0].scatter(anomaly_frames, 
+                            a_lat[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
+
         # 4. 横向加加速度图
         axs[1, 1].plot(range(start_frame, end_frame), lateral_jerk, 'g-', label='Lateral')
         axs[1, 1].set_title(f'Lateral Jerk')
         axs[1, 1].set_xlabel('Frame')
         axs[1, 1].set_ylabel('Jerk (m/s³)')
-        axs[1, 1].grid(True)
 
         # 标记异常帧
         if len(anomaly_frames) > 0:
             axs[1, 1].scatter(anomaly_frames, 
                             lateral_jerk[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        axs[1, 1].legend()
 
         # 5. 偏转角图
         axs[2, 0].plot(range(start_frame, end_frame+1), yaw, 'b-', label='Yaw')
         axs[2, 0].set_title(f'Yaw')
         axs[2, 0].set_xlabel('Frame')
         axs[2, 0].set_ylabel('Yaw (rad)')
-        axs[2, 0].grid(True)
 
         if len(anomaly_frames) > 0:
             axs[2, 0].scatter(anomaly_frames, 
                             yaw[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        axs[2, 0].legend()
         
         # 6. 偏转角变化率图
-        axs[2, 1].plot(range(start_frame, end_frame), yaw_rate, 'b-', label='Yaw Rate')
+        axs[2, 1].plot(range(start_frame, end_frame), yaw_rate, 'g-', label='Yaw Rate')
         axs[2, 1].set_title(f'Yaw Rate')
         axs[2, 1].set_xlabel('Frame')
         axs[2, 1].set_ylabel('Yaw Rate (rad/s)')
-        axs[2, 1].grid(True)
 
         if len(anomaly_frames) > 0:
             axs[2, 1].scatter(anomaly_frames, 
                             yaw_rate[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        axs[2, 1].legend()
 
         # 7. 偏转角变化率图
         axs[3, 0].plot(range(start_frame, end_frame+1), heading, 'b-', label='Heading')
         axs[3, 0].set_title(f'Heading')
         axs[3, 0].set_xlabel('Frame')
         axs[3, 0].set_ylabel('Heading (rad)')
-        axs[3, 0].grid(True)
 
         if len(anomaly_frames) > 0:
             axs[3, 0].scatter(anomaly_frames, 
                             heading[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        axs[3, 0].legend()
-
         # 8. 偏转角变化率图
-        axs[3, 1].plot(range(start_frame, end_frame), heading_rate, 'b-', label='Heading Rate')
+        axs[3, 1].plot(range(start_frame, end_frame), heading_rate, 'g-', label='Heading Rate')
         axs[3, 1].set_title(f'Heading Rate')
         axs[3, 1].set_xlabel('Frame')
         axs[3, 1].set_ylabel('Heading Rate (rad/s)')
-        axs[3, 1].grid(True)
 
         if len(anomaly_frames) > 0:
             axs[3, 1].scatter(anomaly_frames, 
                             heading_rate[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        axs[3, 1].legend()
+
+        for ax in axs.flat:
+            ax.set_xlim(start_frame, end_frame)
+            ax.grid(True)
+            ax.legend()
 
         plt.tight_layout()
-        plt.savefig(os.path.join(self.output_dir, f"acc_{fragment_id}_{ego_id}.png"))
+        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, f"acc_{fragment_id}_{ego_id}.png"))
         plt.close()
         plt.show()
+
+    def visualize_causal_graph(self, causal_graph, fragment_id, ego_id):
+        """
+        Visualize the causal graph using networkx and matplotlib.
+
+        Args:
+            causal_graph: A dictionary representing the causal graph where keys are agent IDs and values are lists of agent IDs they influence.
+        """
+        G = nx.DiGraph()
+
+        # Add edges to the graph
+        for agent, influenced_agents in causal_graph.items():
+            for influenced_agent, ssm_type, critical_frames in influenced_agents:
+                # 添加带有关键帧信息的边
+                G.add_edge(agent, influenced_agent, 
+                          ssm=ssm_type, 
+                          critical_frames=critical_frames,
+                          label=f"{ssm_type}\n Frames: {critical_frames[:3]}...")
+
+        # 绘制图形
+        plt.figure(figsize=(12, 10))
+        pos = nx.spring_layout(G, seed=42)  # 所有节点的位置
         
+        # 绘制节点
+        nx.draw_networkx_nodes(G, pos, 
+                              node_color='lightblue', 
+                              node_size=2000)
+        
+        # 绘制边
+        nx.draw_networkx_edges(G, pos, 
+                              arrowstyle='->', 
+                              arrowsize=20, 
+                              width=2)
+        
+        # 绘制节点标签
+        nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold')
+        
+        # 获取边标签并绘制
+        edge_labels = {(u, v): d['label'] for u, v, d in G.edges(data=True)}
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red')
+
+        plt.title(f"Causal Graph (Fragment: {fragment_id}, Ego: {ego_id})")
+        plt.axis('off')
+        
+        # 保存图形
+        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, f"cg_{fragment_id}_{ego_id}.png"))
+        plt.close()
+
+    def analyze(self, fragment_id, ego_id, visualize_acc=True, visualize_ssm=True, visualize_cg=True):
+        """
+        创建描述代理之间因果关系的因果图，通过分析安全指标
+        
+        Args:
+            fragment_id: 片段ID
+            ego_id: 自车ID
+            visualize_acc: 是否可视化加速度分析
+            visualize_ssm: 是否可视化安全指标
+            visualize_cg: 是否可视化因果图
+        """
+        df, anomaly_frames, start_frame, end_frame = self.prepare_ssm_dataframe(fragment_id, ego_id)
+        if df is None:
+            return None
+        if visualize_acc:
+            self.visualize_acceleration_analysis(fragment_id, ego_id)
+        ssm_dataframe = self.compute_safety_metrics(fragment_id, ego_id)
+        if visualize_ssm:
+            self.visualize_safety_metrics(ssm_dataframe)
+
+        # Initialize a dictionary to store critical conditions for each SSM
+        critical_conditions = {
+            "ttc": [],
+            "drac": [],
+            "psd": [],
+            "tadv": [],
+            "ttc2d": [],
+            "act": [],
+            # "distance": []
+        }
+
+        # Define critical thresholds for each SSM
+        critical_thresholds = {
+            "ttc": TTC_CRITICAL_THRESHOLD,
+            "drac": DRAC_CRITICAL_THRESHOLD,
+            "psd": PSD_CRITICAL_THRESHOLD,
+            "tadv": TADV_CRITICAL_THRESHOLD,
+            "ttc2d": TTC_CRITICAL_THRESHOLD,
+            "act": ACT_CRITICAL_THRESHOLD,
+            # "distance": DISTANCE_CRITICAL_THRESHOLD
+        }
+
+        # Check each SSM for critical conditions
+        for ssm in safety_metrics_list:
+            for tp_id, ssm_values in ssm_dataframe[ssm+"_values"].items():
+                # Determine if the SSM values are critical
+                if ssm in ["ttc", "psd", "tadv", "ttc2d", "act"]:  # Lower is critical
+                    is_critical = [value < critical_thresholds[ssm] for value in ssm_values]
+                else:  # Higher is critical for "drac" and "distance"
+                    is_critical = [value > critical_thresholds[ssm] for value in ssm_values]
+                
+                # Get the indices of critical frames
+                critical_frames_indices = [i for i, critical in enumerate(is_critical) if critical]
+                
+                if tp_id in ssm_dataframe["start_frame"]:
+                    start_frame_tp = ssm_dataframe["start_frame"][tp_id]
+                    # The actual critical frames
+                    critical_frames = [start_frame_tp + i for i in critical_frames_indices]
+                    
+                    # Only keep critical frames that occur within 5 frames before and after anomaly frames
+                    # AND where distance is less than 15 meters
+                    relevant_critical_frames = []
+                    for cf_idx, cf in enumerate(critical_frames):
+                        for af in anomaly_frames:
+                            if abs(cf - af) <= 5:
+                                # Check distance at this critical frame
+                                distance_idx = critical_frames_indices[cf_idx]
+                                if distance_idx < len(ssm_dataframe["distance_values"][tp_id]) and ssm_dataframe["distance_values"][tp_id][distance_idx] < 15.0:
+                                    relevant_critical_frames.append(cf)
+                                    break
+                    
+                    if relevant_critical_frames and len(relevant_critical_frames) > 3:
+                        critical_conditions[ssm].append((tp_id, is_critical, relevant_critical_frames))
+
+        # 创建带边属性的因果图
+        causal_graph = {}
+        for ssm, conditions in critical_conditions.items():
+            for tp_id, is_critical, critical_frames in conditions:
+                if critical_frames:
+                    if tp_id not in causal_graph:
+                        causal_graph[tp_id] = []
+                    causal_graph[tp_id].append((ego_id, ssm, critical_frames))
+
+        if visualize_cg:
+            self.visualize_causal_graph(causal_graph, fragment_id, ego_id)
+        
+        # Save the causal graph to a text file
+        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+        os.makedirs(save_path, exist_ok=True)
+        causal_graph_file = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}.txt")
+        with open(causal_graph_file, "w") as f:
+            f.write(f"Fragment ID: {fragment_id}\n")
+            f.write(f"Ego ID: {ego_id}\n\n")
+            f.write("Causal Graph:\n")
+            for tp_id, edges in causal_graph.items():
+                f.write(f"\nTarget vehicle {tp_id}:\n")
+                for ego_id, ssm, critical_frames in edges:
+                    f.write(f"  - Safety metric: {ssm}\n")
+                    f.write(f"  - Critical frames: {critical_frames}\n")
+        print(f"Causal graph saved to {causal_graph_file}")
+        return causal_graph
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -622,16 +732,10 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
-    ego_id = 1
-    fragment_id = "7_28_1 R21"
-
-    causal_analyzer = CausalAnalyzer(args.data_dir, args.output_dir, args.debug)
-    # causal_analyzer.analyze()
-    # for fragment_id in fragment_id_list:
-    #     for ego_id in ego_id_dict[fragment_id]:
-    #         causal_analyzer.visualize_acceleration_analysis(fragment_id, ego_id)
-    #         ssm = causal_analyzer.compute_safety_metrics(fragment_id, ego_id)
-    #         causal_analyzer.visualize_safety_metrics(ssm)
-    causal_analyzer.visualize_acceleration_analysis(fragment_id, ego_id)
-    ssm = causal_analyzer.compute_safety_metrics(fragment_id, ego_id)
-    causal_analyzer.visualize_safety_metrics(ssm)
+    causal_analyzer = CausalAnalyzer(args.data_dir, args.output_dir)
+    # ego_id = 1
+    # fragment_id = "7_28_1 R21"
+    # causal_analyzer.analyze(fragment_id, ego_id, visualize_acc=True, visualize_ssm=True, visualize_cg=True)
+    for fragment_id in fragment_id_list:
+        for ego_id in ego_id_dict[fragment_id]:
+            causal_analyzer.analyze(fragment_id, ego_id, visualize_acc=True, visualize_ssm=True, visualize_cg=True)
