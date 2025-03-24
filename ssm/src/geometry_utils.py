@@ -144,42 +144,91 @@ def rotate_coor(xyaxis, yyaxis, x2t, y2t):
 
 def CurrentD(samples, toreturn='dataframe'):
     '''
-    Compute the distance between the bounding boxes of vehicles i and j (0 if overlapping).
+    计算车辆i和j的边界框之间的距离（如果重叠则为0）。
+    对于行人类型的对象，将其视为一个点进行计算。
     '''
     if toreturn!='dataframe' and toreturn!='values':
-        warnings.warn("Incorrect target to return. Please specify \'dataframe\' or \'values\'.")
+        warnings.warn("返回目标不正确。请指定'dataframe'或'values'。")
     else:
-        point_i1, point_i2, point_i3, point_i4, point_j1, point_j2, point_j3, point_j4 = getpoints(samples)
+        # 检查是否有行人类型的对象
+        type_i = samples['type_i'].values
+        type_j = samples['type_j'].values
+        
+        # 如果i或j是行人，则使用点到点或点到边界框的距离计算
+        if type_i == 'pedestrian' or type_j == 'pedestrian':
+            # 获取对象的位置
+            pos_i = samples[['x_i', 'y_i']].values
+            pos_j = samples[['x_j', 'y_j']].values
+            
+            if type_i == 'pedestrian' and type_j == 'pedestrian':
+                # 两个都是行人，直接计算点到点的距离
+                cdist = np.sqrt(np.sum((pos_i - pos_j)**2, axis=1))
+            elif type_i == 'pedestrian':
+                # i是行人，j是车辆，计算点到边界框的距离
+                _, _, _, _, point_j1, point_j2, point_j3, point_j4 = getpoints(samples)
+                # 计算行人点到车辆边界框各边的距离
+                dist_mat = []
+                # 计算行人点到车辆边界框各顶点的距离
+                dist_mat.append(np.sqrt((pos_i[:,0]-point_j1[0])**2+(pos_i[:,1]-point_j1[1])**2))
+                dist_mat.append(np.sqrt((pos_i[:,0]-point_j2[0])**2+(pos_i[:,1]-point_j2[1])**2))
+                dist_mat.append(np.sqrt((pos_i[:,0]-point_j3[0])**2+(pos_i[:,1]-point_j3[1])**2))
+                dist_mat.append(np.sqrt((pos_i[:,0]-point_j4[0])**2+(pos_i[:,1]-point_j4[1])**2))
+                for point_j_start, point_j_end in zip([point_j1, point_j4, point_j3, point_j2],
+                                                     [point_j2, point_j3, point_j1, point_j4]):
+                    # 计算点到线段的距离
+                    ist = intersect(line(pos_i.T, pos_i.T+np.array([-(point_j_start-point_j_end)[1],(point_j_start-point_j_end)[0]])), line(point_j_start, point_j_end))
+                    ist[:,~ison(point_j_start, point_j_end, ist, tol=1e-2)] = np.nan
+                    dist_mat.append(np.sqrt((ist[0]-pos_i[:,0])**2+(ist[1]-pos_i[:,1])**2))
+                cdist = np.nanmin(np.array(dist_mat), axis=0)
+            else:
+                # j是行人，i是车辆，计算点到边界框的距离
+                point_i1, point_i2, point_i3, point_i4, _, _, _, _ = getpoints(samples)
+                # 计算行人点到车辆边界框各边的距离
+                dist_mat = []
+                dist_mat.append(np.sqrt((pos_j[:,0]-point_i1[0])**2+(pos_j[:,1]-point_i1[1])**2))
+                dist_mat.append(np.sqrt((pos_j[:,0]-point_i2[0])**2+(pos_j[:,1]-point_i2[1])**2))
+                dist_mat.append(np.sqrt((pos_j[:,0]-point_i3[0])**2+(pos_j[:,1]-point_i3[1])**2))
+                dist_mat.append(np.sqrt((pos_j[:,0]-point_i4[0])**2+(pos_j[:,1]-point_i4[1])**2))
+                for point_i_start, point_i_end in zip([point_i1, point_i4, point_i3, point_i2],
+                                                     [point_i2, point_i3, point_i1, point_i4]):
+                    # 计算点到线段的距离
+                    ist = intersect(line(pos_j.T, pos_j.T+np.array([-(point_i_start-point_i_end)[1],(point_i_start-point_i_end)[0]])), line(point_i_start, point_i_end))
+                    ist[:,~ison(point_i_start, point_i_end, ist, tol=1e-2)] = np.nan
+                    dist_mat.append(np.sqrt((ist[0]-pos_j[:,0])**2+(ist[1]-pos_j[:,1])**2))
+                cdist = np.nanmin(np.array(dist_mat), axis=0)
+        else:
+            # 两个都是车辆，使用原来的边界框计算方法
+            point_i1, point_i2, point_i3, point_i4, point_j1, point_j2, point_j3, point_j4 = getpoints(samples)
 
-        dist_mat = []
-        count_i = 0
-        for point_i_start, point_i_end in zip([point_i1, point_i4, point_i3, point_i2],
-                                              [point_i2, point_i3, point_i1, point_i4]):
-            count_j = 0
-            for point_j_start, point_j_end in zip([point_j1, point_j4, point_j3, point_j2],
-                                                  [point_j2, point_j3, point_j1, point_j4]):
-                if count_i<2 and count_j<2 :
-                    # Distance from point to point
-                    dist_mat.append(np.sqrt((point_i_start[0]-point_j_start[0])**2+(point_i_start[1]-point_j_start[1])**2))
-                    dist_mat.append(np.sqrt((point_i_start[0]-point_j_end[0])**2+(point_i_start[1]-point_j_end[1])**2))
-                    dist_mat.append(np.sqrt((point_i_end[0]-point_j_start[0])**2+(point_i_end[1]-point_j_start[1])**2))
-                    dist_mat.append(np.sqrt((point_i_end[0]-point_j_end[0])**2+(point_i_end[1]-point_j_end[1])**2))
-                    
-                # Distance from point to edge
-                ist = intersect(line(point_i_start, point_i_start+np.array([-(point_j_start-point_j_end)[1],(point_j_start-point_j_end)[0]])), line(point_j_start, point_j_end))
-                ist[:,~ison(point_j_start, point_j_end, ist, tol=1e-2)] = np.nan
-                dist_mat.append(np.sqrt((ist[0]-point_i_start[0])**2+(ist[1]-point_i_start[1])**2))
+            dist_mat = []
+            count_i = 0
+            for point_i_start, point_i_end in zip([point_i1, point_i4, point_i3, point_i2],
+                                                [point_i2, point_i3, point_i1, point_i4]):
+                count_j = 0
+                for point_j_start, point_j_end in zip([point_j1, point_j4, point_j3, point_j2],
+                                                    [point_j2, point_j3, point_j1, point_j4]):
+                    if count_i<2 and count_j<2 :
+                        # 点到点的距离
+                        dist_mat.append(np.sqrt((point_i_start[0]-point_j_start[0])**2+(point_i_start[1]-point_j_start[1])**2))
+                        dist_mat.append(np.sqrt((point_i_start[0]-point_j_end[0])**2+(point_i_start[1]-point_j_end[1])**2))
+                        dist_mat.append(np.sqrt((point_i_end[0]-point_j_start[0])**2+(point_i_end[1]-point_j_start[1])**2))
+                        dist_mat.append(np.sqrt((point_i_end[0]-point_j_end[0])**2+(point_i_end[1]-point_j_end[1])**2))
+                        
+                    # 点到边的距离
+                    ist = intersect(line(point_i_start, point_i_start+np.array([-(point_j_start-point_j_end)[1],(point_j_start-point_j_end)[0]])), line(point_j_start, point_j_end))
+                    ist[:,~ison(point_j_start, point_j_end, ist, tol=1e-2)] = np.nan
+                    dist_mat.append(np.sqrt((ist[0]-point_i_start[0])**2+(ist[1]-point_i_start[1])**2))
 
-                # Overlapped bounding boxes
-                ist = intersect(line(point_i_start, point_i_end), line(point_j_start, point_j_end))
-                dist = np.ones(len(samples))*np.nan
-                dist[ison(point_i_start, point_i_end, ist)&ison(point_j_start, point_j_end, ist)] = 0
-                dist[np.isnan(ist[0])&(ison(point_i_start, point_i_end, point_j_start)|ison(point_i_start, point_i_end, point_j_end))] = 0
-                dist_mat.append(dist)
-                count_j += 1
-            count_i += 1
+                    # 重叠的边界框
+                    ist = intersect(line(point_i_start, point_i_end), line(point_j_start, point_j_end))
+                    dist = np.ones(len(samples))*np.nan
+                    dist[ison(point_i_start, point_i_end, ist)&ison(point_j_start, point_j_end, ist)] = 0
+                    dist[np.isnan(ist[0])&(ison(point_i_start, point_i_end, point_j_start)|ison(point_i_start, point_i_end, point_j_end))] = 0
+                    dist_mat.append(dist)
+                    count_j += 1
+                count_i += 1
 
-        cdist = np.nanmin(np.array(dist_mat), axis=0)
+            cdist = np.nanmin(np.array(dist_mat), axis=0)
 
         if toreturn=='dataframe':
             samples['CurrentD'] = cdist

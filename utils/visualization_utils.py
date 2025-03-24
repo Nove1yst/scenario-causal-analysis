@@ -13,11 +13,11 @@ import networkx as nx
 
 def visualize_causal_graph(causal_graph, save_path=None):
     """
-    使用networkx和matplotlib可视化因果图。
+    Visualize the causal graph.
 
     Args:
-        causal_graph: 表示因果图的字典，其中键是代理ID，值是它们影响的代理ID列表。
-        save_path: 保存图像的路径
+        causal_graph: A dictionary representing the causal graph, where the keys are agent IDs and the values are lists of agent IDs they influence.
+        save_path: The path to save the image
     """
     G = nx.DiGraph()
 
@@ -28,7 +28,7 @@ def visualize_causal_graph(causal_graph, save_path=None):
             G.add_edge(agent, influenced_agent, 
                       ssm=ssm_type, 
                       critical_frames=critical_frames,
-                      label=f"{ssm_type}\n帧: {critical_frames[:3]}...")
+                      label=f"{ssm_type}\n Frame: {critical_frames[:3]}...")
 
     # 绘制图形
     plt.figure(figsize=(12, 10))
@@ -52,7 +52,7 @@ def visualize_causal_graph(causal_graph, save_path=None):
     edge_labels = {(u, v): d['label'] for u, v, d in G.edges(data=True)}
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red')
 
-    plt.title("因果图")
+    plt.title("Causal Graph")
     plt.axis('off')
     
     # 保存图形
