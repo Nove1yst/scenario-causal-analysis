@@ -11,54 +11,54 @@ import numpy as np
 from tqdm import tqdm
 import networkx as nx
 
-def visualize_causal_graph(causal_graph, save_path=None):
-    """
-    Visualize the causal graph.
+# def visualize_causal_graph(causal_graph, save_path=None):
+#     """
+#     Visualize the causal graph.
 
-    Args:
-        causal_graph: A dictionary representing the causal graph, where the keys are agent IDs and the values are lists of agent IDs they influence.
-        save_path: The path to save the image
-    """
-    G = nx.DiGraph()
+#     Args:
+#         causal_graph: A dictionary representing the causal graph, where the keys are agent IDs and the values are lists of agent IDs they influence.
+#         save_path: The path to save the image
+#     """
+#     G = nx.DiGraph()
 
-    # 添加边到图中
-    for agent, influenced_agents in causal_graph.items():
-        for influenced_agent, ssm_type, critical_frames in influenced_agents:
-            # 添加带有关键帧信息的边
-            G.add_edge(agent, influenced_agent, 
-                      ssm=ssm_type, 
-                      critical_frames=critical_frames,
-                      label=f"{ssm_type}\n Frame: {critical_frames[:3]}...")
+#     # 添加边到图中
+#     for agent, influenced_agents in causal_graph.items():
+#         for influenced_agent, ssm_type, critical_frames in influenced_agents:
+#             # 添加带有关键帧信息的边
+#             G.add_edge(agent, influenced_agent, 
+#                       ssm=ssm_type, 
+#                       critical_frames=critical_frames,
+#                       label=f"{ssm_type}\n Frame: {critical_frames[:3]}...")
 
-    # 绘制图形
-    plt.figure(figsize=(12, 10))
-    pos = nx.spring_layout(G, seed=42)  # 所有节点的位置
+#     # 绘制图形
+#     plt.figure(figsize=(12, 10))
+#     pos = nx.spring_layout(G, seed=42)  # 所有节点的位置
     
-    # 绘制节点
-    nx.draw_networkx_nodes(G, pos, 
-                          node_color='lightblue', 
-                          node_size=2000)
+#     # 绘制节点
+#     nx.draw_networkx_nodes(G, pos, 
+#                           node_color='lightblue', 
+#                           node_size=2000)
     
-    # 绘制边
-    nx.draw_networkx_edges(G, pos, 
-                          arrowstyle='->', 
-                          arrowsize=20, 
-                          width=2)
+#     # 绘制边
+#     nx.draw_networkx_edges(G, pos, 
+#                           arrowstyle='->', 
+#                           arrowsize=20, 
+#                           width=2)
     
-    # 绘制节点标签
-    nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold')
+#     # 绘制节点标签
+#     nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold')
     
-    # 获取边标签并绘制
-    edge_labels = {(u, v): d['label'] for u, v, d in G.edges(data=True)}
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red')
+#     # 获取边标签并绘制
+#     edge_labels = {(u, v): d['label'] for u, v, d in G.edges(data=True)}
+#     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red')
 
-    plt.title("Causal Graph")
-    plt.axis('off')
+#     plt.title("Causal Graph")
+#     plt.axis('off')
     
-    # 保存图形
-    if save_path:
-        plt.savefig(save_path)
-    plt.close()
+#     # 保存图形
+#     if save_path:
+#         plt.savefig(save_path)
+#     plt.close()
 
 def create_mp4_from_scenario(track_info, frame_info, track_id, scene_id, out_path_scene_id, fps=10):
     images = []
