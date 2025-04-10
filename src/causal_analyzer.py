@@ -86,8 +86,8 @@ class CausalAnalyzer:
             start_frame = np.max([start_frame, np.min(anomaly_frames_id) - 30])
             end_frame = np.min([end_frame, np.max(anomaly_frames_id)+1])
 
-        if end_frame in anomaly_frames_id:
-            anomaly_frames_id = anomaly_frames_id[:-1]
+        # if end_frame in anomaly_frames_id:
+        #     anomaly_frames_id = anomaly_frames_id[:-1]
 
         return self.frame_data_processed[fragment_id][start_frame: end_frame+1], anomaly_frames_id, start_frame, end_frame
     
@@ -259,11 +259,11 @@ class CausalAnalyzer:
         axs[1, 1].set_ylabel('Distance (m)')
         axs[1, 1].set_ylim(0, 20)
         
-        for frame in anomaly_frames:
-            for ax in axs.flat:
-                ax.set_xlim(start_frame, end_frame)
-                ax.grid(True)
-                ax.legend()
+        for ax in axs.flat:
+            ax.set_xlim(start_frame, end_frame)
+            ax.grid(True)
+            ax.legend()
+            for frame in anomaly_frames:
                 ax.axvline(x=frame, color='r', linestyle='--', alpha=0.5)
     
         plt.tight_layout()
@@ -296,6 +296,8 @@ class CausalAnalyzer:
         heading = np.zeros(num_timesteps)
         yaw_rate = np.zeros(num_timesteps-1)
         heading_rate = np.zeros(num_timesteps-1)
+        yaw_acc = np.zeros(num_timesteps-2)
+        heading_acc = np.zeros(num_timesteps-2)
 
         for t in range(num_timesteps):
             a_lon[t] = df[t][ego_id]['a_lon']
@@ -303,30 +305,24 @@ class CausalAnalyzer:
             yaw[t] = df[t][ego_id]['yaw_rad']
             heading[t] = df[t][ego_id]['heading_rad']
 
-        # # 计算急刹车事件（纵向加速度低于阈值）
-        # hard_braking_threshold = -LON_BRAKING_THRESHOLD  # m/s²
-        # hard_braking_events = a_lon < hard_braking_threshold
-        
-        # # 计算急加速事件（纵向加速度高于阈值）
-        # hard_acceleration_threshold = LON_ACCELERATION_THRESHOLD  # m/s²
-        # hard_acceleration_events = a_lon > hard_acceleration_threshold
-        
-        # # 计算急转弯事件（横向加速度超过阈值或角速度超过阈值）
-        # hard_turning_threshold_angular = 0.3  # rad/s
-        # hard_turning_threshold_lateral = LAT_ACC_THRESHOLD  # m/s²
-        # hard_turning_events_angular = np.zeros((num_timesteps, num_agents), dtype=bool)
-        # for t in range(num_timesteps-1):
-        #     hard_turning_events_angular[t] = np.abs(angular_velocities[t, :, 0]) > hard_turning_threshold_angular
-        # hard_turning_events_lateral = np.abs(lateral_acc) > hard_turning_threshold_lateral  
-
+        time_step = 0.1
         for t in range(num_timesteps-1):
-            time_step = df[t+1][ego_id]['timestamp_ms'] - df[t][ego_id]['timestamp_ms'] / 1000.0
             longitudinal_jerk[t] = (df[t+1][ego_id]['a_lon'] - df[t][ego_id]['a_lon']) / time_step
             lateral_jerk[t] = (df[t+1][ego_id]['a_lat'] - df[t][ego_id]['a_lat']) / time_step
             yaw_rate[t] = (df[t+1][ego_id]['yaw_rad'] - df[t][ego_id]['yaw_rad']) / time_step
             heading_rate[t] = (df[t+1][ego_id]['heading_rad'] - df[t][ego_id]['heading_rad']) / time_step
+
+        for t in range(num_timesteps-2):
+            yaw_acc[t] = (yaw_rate[t+1] - yaw_rate[t]) / time_step
+            heading_acc[t] = (heading_rate[t+1] - heading_rate[t]) / time_step
         
-        fig, axs = plt.subplots(4, 2, figsize=(12, 12))
+        fig, axs = plt.subplots(5, 2, figsize=(12, 12))
+        
+        # anomaly frames to plot
+        if end_frame in anomaly_frames:
+            anomaly_frames = anomaly_frames[:-1]
+        if end_frame-1 in anomaly_frames:
+            anomaly_frames = anomaly_frames[:-1]
         
         # 1. 纵向加速度图
         axs[0, 0].plot(range(start_frame, end_frame+1), a_lon, 'b-', label='Longitudinal')
@@ -386,8 +382,8 @@ class CausalAnalyzer:
         # axs[1, 0].axhline(y=-LONJ_THRESHOLD, color='r', linestyle='--', alpha=0.5)
         # axs[1, 0].text(0, LONJ_THRESHOLD+0.5, f'Comfort threshold (±{LONJ_THRESHOLD} m/s³)', color='r', alpha=0.7)
         # axs[1, 0].legend()
-
-         # 3. 横向加速度图
+        
+        # 3. 横向加速度图
         axs[1, 0].plot(range(start_frame, end_frame+1), a_lat, 'g-', label='Lateral')
         axs[1, 0].set_title(f'Lateral Acceleration')
         axs[1, 0].set_xlabel('Frame')
@@ -443,11 +439,42 @@ class CausalAnalyzer:
             axs[3, 0].scatter(anomaly_frames, 
                             heading[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
+            
         # 8. 偏转角变化率图
         axs[3, 1].plot(range(start_frame, end_frame), heading_rate, 'g-', label='Heading Rate')
         axs[3, 1].set_title(f'Heading Rate')
         axs[3, 1].set_xlabel('Frame')
         axs[3, 1].set_ylabel('Heading Rate (rad/s)')
+
+        if len(anomaly_frames) > 0:
+            axs[3, 1].scatter(anomaly_frames, 
+                            heading_rate[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
+
+        for ax in axs.flat:
+            ax.set_xlim(start_frame, end_frame)
+            ax.grid(True)
+            ax.legend()
+
+        axs[4, 0].plot(range(start_frame, end_frame-1), yaw_acc, 'g-', label='Yaw Accleration')
+        axs[4, 0].set_title(f'Yaw Acceleration')
+        axs[4, 0].set_xlabel('Frame')
+        axs[4, 0].set_ylabel('Yaw Acceleration (rad/s²)')
+
+        if len(anomaly_frames) > 0:
+            axs[3, 1].scatter(anomaly_frames, 
+                            heading_rate[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
+
+        for ax in axs.flat:
+            ax.set_xlim(start_frame, end_frame)
+            ax.grid(True)
+            ax.legend()
+
+        axs[4, 1].plot(range(start_frame, end_frame-1), heading_acc, 'g-', label='Heading Acceleration')
+        axs[4, 1].set_title(f'Heading Acceleration')
+        axs[4, 1].set_xlabel('Frame')
+        axs[4, 1].set_ylabel('Heading Acceleration (rad/s²)')
 
         if len(anomaly_frames) > 0:
             axs[3, 1].scatter(anomaly_frames, 
@@ -698,9 +725,45 @@ class CausalAnalyzer:
                 # 合并父节点的因果图到完整因果图
                 if parent_graph:
                     for p_id, edges in parent_graph.items():
+                        # TODO: This may lead to bugs.
                         if p_id not in complete_causal_graph:
                             complete_causal_graph[p_id] = []
-                        complete_causal_graph[p_id].extend(edges)
+                        
+                        for target_id, ssm, critical_frames in edges:
+                            # 检查是否已存在边（无论方向）
+                            edge_exists = False
+                            existing_edge_idx = -1
+                            parent_id = None
+                            child_id = None
+                            
+                            # 检查正向边
+                            for idx, (existing_target, existing_ssm, existing_frames) in enumerate(complete_causal_graph[p_id]):
+                                if existing_target == target_id and existing_ssm == ssm:
+                                    edge_exists = True
+                                    existing_edge_idx = idx
+                                    parent_id = p_id
+                                    child_id = target_id
+                                    break
+                            
+                            # 检查反向边
+                            if not edge_exists and target_id in complete_causal_graph:
+                                for idx, (existing_target, existing_ssm, existing_frames) in enumerate(complete_causal_graph[target_id]):
+                                    if existing_target == p_id and existing_ssm == ssm:
+                                        edge_exists = True
+                                        existing_edge_idx = idx
+                                        parent_id = target_id
+                                        child_id = p_id
+                                        break
+                            
+                            if edge_exists:
+                                # 合并关键帧
+                                if existing_edge_idx >= 0:
+                                    existing_frames = complete_causal_graph[parent_id][existing_edge_idx][2]
+                                    merged_frames = sorted(list(set(existing_frames + critical_frames)))
+                                    complete_causal_graph[parent_id][existing_edge_idx] = (child_id, ssm, merged_frames)
+                            else:
+                                # 添加新边
+                                complete_causal_graph[p_id].append((target_id, ssm, critical_frames))
         
         # 只在顶层调用时可视化和保存完整因果图
         if depth == 0 and visualize_cg:

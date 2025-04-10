@@ -40,7 +40,7 @@ if __name__ == "__main__":
     causal_analyzer = CausalAnalyzer(args.data_dir, args.output_dir)
     if args.debug:
         causal_analyzer.load_data()
-        causal_analyzer.analyze(fragment_id_list[0], ego_id_dict[fragment_id_list[0]][0], visualize_acc=True, visualize_ssm=True, visualize_cg=True, depth=0, max_depth=1)
+        causal_analyzer.analyze(fragment_id_list[0], ego_id_dict[fragment_id_list[0]][3], visualize_acc=True, visualize_ssm=True, visualize_cg=True, depth=0, max_depth=1)
     else:
         causal_analyzer.load_data()
         for fragment_id in fragment_id_list:
