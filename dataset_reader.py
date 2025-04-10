@@ -38,10 +38,6 @@ if __name__ == "__main__":
 
     with open(os.path.join(args.data_dir, "tp_info_tj.pkl"), "rb") as f:
         tp_info = pickle.load(f)
-    # with open(os.path.join(self.data_dir, "frame_data_tj.pkl"), "rb") as f:
-    #     self.frame_data = pickle.load(f)
-    # with open(os.path.join(self.data_dir, "frame_data_tj_processed.pkl"), "rb") as f:
-    #     self.frame_data_processed = pickle.load(f)
 
     meta_data_dict = {
         "signal_violation_behavior": set(),

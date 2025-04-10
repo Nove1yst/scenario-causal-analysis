@@ -4,21 +4,10 @@
 """
 import os
 import sys
-import json
-import glob
-import math
 import argparse
-import pickle
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-from matplotlib.animation import FuncAnimation
-from matplotlib.patches import FancyArrowPatch
 
 sys.path.append(os.getcwd())
-from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
-from ssm.src.geometry_utils import CurrentD
 from src.causal_analyzer import CausalAnalyzer
 
 fragment_id_list = ['7_28_1 R21', '8_10_1 R18', '8_10_2 R19', '8_11_1 R20']
@@ -40,12 +29,17 @@ if __name__ == "__main__":
     causal_analyzer = CausalAnalyzer(args.data_dir, args.output_dir)
     if args.debug:
         causal_analyzer.load_data()
-        causal_analyzer.analyze(fragment_id_list[0], ego_id_dict[fragment_id_list[0]][0], visualize_acc=True, visualize_ssm=True, visualize_cg=True, depth=0, max_depth=1)
+        causal_analyzer.analyze(fragment_id_list[0], 
+                                ego_id_dict[fragment_id_list[0]][0], 
+                                visualize_acc=True, 
+                                visualize_ssm=True, 
+                                visualize_cg=True, 
+                                depth=0, max_depth=2)
     else:
         causal_analyzer.load_data()
         for fragment_id in fragment_id_list:
             for ego_id in ego_id_dict[fragment_id]:
-                causal_analyzer.visualize_acceleration_analysis(fragment_id, ego_id)
-                causal_analyzer.analyze(fragment_id, ego_id, depth=0, max_depth=args.depth)
+                # causal_analyzer.analyze_track(fragment_id, ego_id, visualize=True)
+                causal_analyzer.analyze(fragment_id, ego_id, max_depth=args.depth, visualize_ssm=True)
                 # cg = causal_analyzer.load_causal_graph(fragment_id, ego_id)
                 # causal_analyzer.visualize_causal_graph(cg, fragment_id, ego_id)

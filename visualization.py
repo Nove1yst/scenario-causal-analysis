@@ -13,7 +13,7 @@ if __name__ == "__main__":
         tp_info = pickle.load(f)
     with open(os.path.join(output_base_path, "frame_data_tj.pkl"), "rb") as f:
         frame_data = pickle.load(f)
-    output_path = os.path.join(output_base_path, "visualization1")
+    output_path = os.path.join(output_base_path, "visualization_long")
 
     for fragment_id in tqdm(track_change.keys(), desc=f'Processing all scenes'):
         tracks = track_change[fragment_id]
@@ -31,15 +31,15 @@ if __name__ == "__main__":
             if anomalies_frame_id[0] == frame_start:
                 anomalies_frame_id = np.delete(anomalies_frame_id, 0)
 
-            if anomalies_frame_id[0] - 10 < frame_start:
+            if anomalies_frame_id[0] - 100 < frame_start:
                 draw_frame_id_start = frame_start
             else:
-                draw_frame_id_start = anomalies_frame_id[0] - 10
+                draw_frame_id_start = anomalies_frame_id[0] - 100
 
-            if anomalies_frame_id[-1] + 10 > frame_end:
+            if anomalies_frame_id[-1] + 100 > frame_end:
                 draw_frame_id_end = frame_end
             else:
-                draw_frame_id_end = anomalies_frame_id[-1] + 10
+                draw_frame_id_end = anomalies_frame_id[-1] + 100
             frame_step = 1  # 默认步长为1
             # 如果帧数超过10000，则每10帧绘制一次
             if draw_frame_id_end - draw_frame_id_start > 10000:

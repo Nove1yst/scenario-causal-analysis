@@ -13,16 +13,15 @@ class AgentType(Enum):
 
 class CrossType(Enum):
     """Crossing behavior type enumeration"""
-    NORMAL = "Normal"
-    AGGRESSIVE = "Aggressive crossing"
-    VIOLATION = "Violation crossing"
-    ZIGZAG = "Zigzag crossing"
+    STRAIGHT = "StraightCross"
+    RIGHT_TURN = "RightTurn"
+    LEFT_TURN = "LeftTurn"
 
 class SignalViolation(Enum):
     """Signal violation type enumeration"""
     NONE = "No violation of traffic lights"
-    RED_LIGHT = "Red light running"
-    STOP_SIGN = "Stop sign violation"
+    RED_LIGHT = "red-light running"
+    YELLOW_LIGHT = "yellow-light running"
 
 class RetrogradeType(Enum):
     """Retrograde behavior type enumeration"""
@@ -48,16 +47,23 @@ class Agent:
         # Trajectory data
         self.frames = []  # Frame IDs
         self.timestamps = []  # Timestamps
-        self.positions = []  # x, y coordinates
-        self.velocities = []  # vx, vy
-        self.accelerations = []  # ax, ay
-        self.headings = []  # heading angles
+        self.x = []  # x, y coordinates
+        self.y = []
+        self.vx = []  # vx, vy
+        self.vy = []
+        self.yaw =  []
+        self.heading = []
+        self.ax = []  # ax, ay
+        self.ay = []
+        self.vlon = []
+        self.vlat = []
+        self.alon = []
+        self.alat = []
         self.dimensions = None  # length, width
         
         # Behavior information
         self.cross_type = []
         self.signal_violations = []
-        self.retrograde_type = RetrogradeType.NORMAL
         
         # Interaction information
         self.anomaly_frames = []  # Frames where anomalies occur
@@ -77,10 +83,15 @@ class Agent:
         """
         self.frames.append(frame_id)
         self.timestamps.append(timestamp)
-        self.positions.append((x, y))
-        self.velocities.append((vx, vy))
-        self.accelerations.append((ax, ay))
-        self.headings.append(heading)
+        self.x.append(x)
+        self.y.append(y)
+        self.vx.append(vx)
+        self.vy.append(vy)
+        self.ax.append(ax)
+        self.ay.append(ay)
+        self.yaw.append(yaw)
+        self.heading.append(heading)
+
         
     def set_dimensions(self, length, width):
         """Set agent dimensions"""
