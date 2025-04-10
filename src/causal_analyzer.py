@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
-# from src.causal_graph import CausalGraph
 
 LATJ_THRESHOLD = 0.5 * 9.81  # 横向加加速度风险阈值
 LONJ_THRESHOLD = 1.2 * 9.81  # 纵向加加速度风险阈值
@@ -89,8 +88,6 @@ class CausalAnalyzer:
 
         if end_frame in anomaly_frames_id:
             anomaly_frames_id = anomaly_frames_id[:-1]
-        if end_frame-1 in anomaly_frames_id:
-            anomaly_frames_id = anomaly_frames_id[:-1]
 
         return self.frame_data_processed[fragment_id][start_frame: end_frame+1], anomaly_frames_id, start_frame, end_frame
     
@@ -109,6 +106,10 @@ class CausalAnalyzer:
         if df is None:
             return None
         num_timesteps = len(df)
+        
+        # TODO: detect the type of anomaly
+        # for anomaly_frame in anomalies_frames:
+        #     df_anomaly = df[anomaly_frame]
 
         distance_values = {}
         tadv_values = {}
@@ -147,6 +148,7 @@ class CausalAnalyzer:
                 })
 
                 # Calculate the distance between the two agents
+                # distance = np.linalg.norm(ssm_data['x_i'] - ssm_data['x_j'])
                 distance = CurrentD(ssm_data, toreturn='values')
                 tadv_result = TAdv(ssm_data, toreturn='values')
                 ttc2d_result = TTC2D(ssm_data, toreturn='values')
@@ -271,7 +273,7 @@ class CausalAnalyzer:
         plt.close()
         plt.show()
     
-    def analyze_track(self, fragment_id, ego_id, visualize=True):
+    def visualize_acceleration_analysis(self, fragment_id, ego_id):
         """
         创建加速度和加加速度的详细分析图
         
@@ -294,8 +296,6 @@ class CausalAnalyzer:
         heading = np.zeros(num_timesteps)
         yaw_rate = np.zeros(num_timesteps-1)
         heading_rate = np.zeros(num_timesteps-1)
-        yaw_jerk = np.zeros(num_timesteps-2)
-        heading_jerk = np.zeros(num_timesteps-2)
 
         for t in range(num_timesteps):
             a_lon[t] = df[t][ego_id]['a_lon']
@@ -303,135 +303,168 @@ class CausalAnalyzer:
             yaw[t] = df[t][ego_id]['yaw_rad']
             heading[t] = df[t][ego_id]['heading_rad']
 
+        # # 计算急刹车事件（纵向加速度低于阈值）
+        # hard_braking_threshold = -LON_BRAKING_THRESHOLD  # m/s²
+        # hard_braking_events = a_lon < hard_braking_threshold
+        
+        # # 计算急加速事件（纵向加速度高于阈值）
+        # hard_acceleration_threshold = LON_ACCELERATION_THRESHOLD  # m/s²
+        # hard_acceleration_events = a_lon > hard_acceleration_threshold
+        
+        # # 计算急转弯事件（横向加速度超过阈值或角速度超过阈值）
+        # hard_turning_threshold_angular = 0.3  # rad/s
+        # hard_turning_threshold_lateral = LAT_ACC_THRESHOLD  # m/s²
+        # hard_turning_events_angular = np.zeros((num_timesteps, num_agents), dtype=bool)
+        # for t in range(num_timesteps-1):
+        #     hard_turning_events_angular[t] = np.abs(angular_velocities[t, :, 0]) > hard_turning_threshold_angular
+        # hard_turning_events_lateral = np.abs(lateral_acc) > hard_turning_threshold_lateral  
+
         for t in range(num_timesteps-1):
             time_step = df[t+1][ego_id]['timestamp_ms'] - df[t][ego_id]['timestamp_ms'] / 1000.0
             longitudinal_jerk[t] = (df[t+1][ego_id]['a_lon'] - df[t][ego_id]['a_lon']) / time_step
             lateral_jerk[t] = (df[t+1][ego_id]['a_lat'] - df[t][ego_id]['a_lat']) / time_step
             yaw_rate[t] = (df[t+1][ego_id]['yaw_rad'] - df[t][ego_id]['yaw_rad']) / time_step
             heading_rate[t] = (df[t+1][ego_id]['heading_rad'] - df[t][ego_id]['heading_rad']) / time_step
-
-        for t in range(num_timesteps-2):
-            time_step = df[t+1][ego_id]['timestamp_ms'] - df[t][ego_id]['timestamp_ms'] / 1000.0
-            yaw_jerk[t] = (yaw_rate[t+1] - yaw_rate[t]) / time_step
-            heading_jerk[t] = (heading_rate[t+1] - heading_rate[t]) / time_step
         
-        if visualize:
-            fig, axs = plt.subplots(5, 2, figsize=(12, 12))
-            
-            # 1. 纵向加速度图
-            axs[0, 0].plot(range(start_frame, end_frame+1), a_lon, 'b-', label='Longitudinal')
-            axs[0, 0].set_title(f'Longitudinal Acceleration')
-            axs[0, 0].set_xlabel('Frame')
-            axs[0, 0].set_ylabel('Acceleration (m/s²)')
-            # 标记异常帧
-            if len(anomaly_frames) > 0:
-                axs[0, 0].scatter(anomaly_frames, 
-                                a_lon[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
-            
-            # 2. 纵向加加速度图
-            axs[0, 1].plot(range(start_frame, end_frame), longitudinal_jerk, 'b-', label='Longitudinal')
-            axs[0, 1].set_title(f'Longitudinal Jerk')
-            axs[0, 1].set_xlabel('Frame')
-            axs[0, 1].set_ylabel('Jerk (m/s³)')
-            if len(anomaly_frames) > 0:
-                axs[0, 1].scatter(anomaly_frames, 
-                                longitudinal_jerk[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
+        fig, axs = plt.subplots(4, 2, figsize=(12, 12))
+        
+        # 1. 纵向加速度图
+        axs[0, 0].plot(range(start_frame, end_frame+1), a_lon, 'b-', label='Longitudinal')
+        axs[0, 0].set_title(f'Longitudinal Acceleration')
+        axs[0, 0].set_xlabel('Frame')
+        axs[0, 0].set_ylabel('Acceleration (m/s²)')
+        # 标记异常帧
+        if len(anomaly_frames) > 0:
+            axs[0, 0].scatter(anomaly_frames, 
+                            a_lon[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
+        
+        # # 标记急刹车和急加速事件
+        # braking_events = range(start_frame, end_frame+1)[hard_braking_events]
+        # if len(braking_events) > 0:
+        #     axs[0, 0].scatter(braking_events, 
+        #                     longitudinal_acc[hard_braking_events], 
+        #                     color='red', label='Hard braking')
+        
+        # acceleration_events = time_steps[hard_acceleration_events]
+        # if len(acceleration_events) > 0:
+        #     axs[0, 0].scatter(acceleration_events, 
+        #                     longitudinal_acc[hard_acceleration_events], 
+        #                     color='orange', label='Hard acceleration')
+        
+        # # 添加舒适阈值线
+        # axs[0, 0].axhline(y=LON_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
+        # axs[0, 0].axhline(y=-LON_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
+        # axs[0, 0].text(0, LON_ACC_THRESHOLD+0.5, f'Comfort threshold (±{LON_ACC_THRESHOLD} m/s²)', color='r', alpha=0.7)
+        # axs[0, 0].legend()
+        
+        # # 标记急转弯事件
+        # turning_events = time_steps[hard_turning_events]
+        # if len(turning_events) > 0:
+        #     axs[0, 1].scatter(turning_events, 
+        #                     lateral_acc[hard_turning_events], 
+        #                     color='red', label='Hard turning')
+        
+        # # 添加舒适阈值线
+        # axs[0, 1].axhline(y=LAT_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
+        # axs[0, 1].axhline(y=-LAT_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
+        # axs[0, 1].text(0, LAT_ACC_THRESHOLD+0.5, f'Comfort threshold (±{LAT_ACC_THRESHOLD} m/s²)', color='r', alpha=0.7)
+        
+        # 2. 纵向加加速度图
+        axs[0, 1].plot(range(start_frame, end_frame), longitudinal_jerk, 'b-', label='Longitudinal')
+        axs[0, 1].set_title(f'Longitudinal Jerk')
+        axs[0, 1].set_xlabel('Frame')
+        axs[0, 1].set_ylabel('Jerk (m/s³)')
 
-            # 3. 横向加速度图
-            axs[1, 0].plot(range(start_frame, end_frame+1), a_lat, 'g-', label='Lateral')
-            axs[1, 0].set_title(f'Lateral Acceleration')
-            axs[1, 0].set_xlabel('Frame')
-            axs[1, 0].set_ylabel('Acceleration (m/s²)')
-            if len(anomaly_frames) > 0:
-                axs[1, 0].scatter(anomaly_frames, 
-                                a_lat[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
+        # 标记异常帧
+        if len(anomaly_frames) > 0:
+            axs[0, 1].scatter(anomaly_frames, 
+                            longitudinal_jerk[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
+        # # 添加舒适阈值线
+        # axs[1, 0].axhline(y=LONJ_THRESHOLD, color='r', linestyle='--', alpha=0.5)
+        # axs[1, 0].axhline(y=-LONJ_THRESHOLD, color='r', linestyle='--', alpha=0.5)
+        # axs[1, 0].text(0, LONJ_THRESHOLD+0.5, f'Comfort threshold (±{LONJ_THRESHOLD} m/s³)', color='r', alpha=0.7)
+        # axs[1, 0].legend()
 
-            # 4. 横向加加速度图
-            axs[1, 1].plot(range(start_frame, end_frame), lateral_jerk, 'g-', label='Lateral')
-            axs[1, 1].set_title(f'Lateral Jerk')
-            axs[1, 1].set_xlabel('Frame')
-            axs[1, 1].set_ylabel('Jerk (m/s³)')
-            if len(anomaly_frames) > 0:
-                axs[1, 1].scatter(anomaly_frames, 
-                                lateral_jerk[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
+         # 3. 横向加速度图
+        axs[1, 0].plot(range(start_frame, end_frame+1), a_lat, 'g-', label='Lateral')
+        axs[1, 0].set_title(f'Lateral Acceleration')
+        axs[1, 0].set_xlabel('Frame')
+        axs[1, 0].set_ylabel('Acceleration (m/s²)')
 
-            # 5. 偏转角图
-            axs[2, 0].plot(range(start_frame, end_frame+1), yaw, 'b-', label='Yaw')
-            axs[2, 0].set_title(f'Yaw')
-            axs[2, 0].set_xlabel('Frame')
-            axs[2, 0].set_ylabel('Yaw (rad)')
-            if len(anomaly_frames) > 0:
-                axs[2, 0].scatter(anomaly_frames, 
-                                yaw[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
-            
-            # 6. 偏转角变化率图
-            axs[2, 1].plot(range(start_frame, end_frame), yaw_rate, 'g-', label='Yaw Rate')
-            axs[2, 1].set_title(f'Yaw Rate')
-            axs[2, 1].set_xlabel('Frame')
-            axs[2, 1].set_ylabel('Yaw Rate (rad/s)')
-            if len(anomaly_frames) > 0:
-                axs[2, 1].scatter(anomaly_frames, 
-                                yaw_rate[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
+        # 标记异常帧
+        if len(anomaly_frames) > 0:
+            axs[1, 0].scatter(anomaly_frames, 
+                            a_lat[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
 
-            # 7. 
-            axs[3, 0].plot(range(start_frame, end_frame+1), heading, 'b-', label='Heading')
-            axs[3, 0].set_title(f'Heading')
-            axs[3, 0].set_xlabel('Frame')
-            axs[3, 0].set_ylabel('Heading (rad)')
+        # 4. 横向加加速度图
+        axs[1, 1].plot(range(start_frame, end_frame), lateral_jerk, 'g-', label='Lateral')
+        axs[1, 1].set_title(f'Lateral Jerk')
+        axs[1, 1].set_xlabel('Frame')
+        axs[1, 1].set_ylabel('Jerk (m/s³)')
 
-            if len(anomaly_frames) > 0:
-                axs[3, 0].scatter(anomaly_frames, 
-                                heading[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
-                
-            # 8. 偏转角变化率图
-            axs[3, 1].plot(range(start_frame, end_frame), heading_rate, 'g-', label='Heading Rate')
-            axs[3, 1].set_title('Heading Rate')
-            axs[3, 1].set_xlabel('Frame')
-            axs[3, 1].set_ylabel('Heading Rate (rad/s)')
+        # 标记异常帧
+        if len(anomaly_frames) > 0:
+            axs[1, 1].scatter(anomaly_frames, 
+                            lateral_jerk[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
 
-            if len(anomaly_frames) > 0:
-                axs[3, 1].scatter(anomaly_frames, 
-                                heading_rate[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
-                
-            axs[4, 0].plot(range(start_frame, end_frame-1), yaw_jerk, 'g-', label='Yaw Jerk')
-            axs[4, 0].set_title('Yaw Jerk')
-            axs[4, 0].set_xlabel('Frame')
-            axs[4, 0].set_ylabel('Yaw Jerk (rad/s²)')
+        # 5. 偏转角图
+        axs[2, 0].plot(range(start_frame, end_frame+1), yaw, 'b-', label='Yaw')
+        axs[2, 0].set_title(f'Yaw')
+        axs[2, 0].set_xlabel('Frame')
+        axs[2, 0].set_ylabel('Yaw (rad)')
 
-            if len(anomaly_frames) > 0:
-                axs[4, 0].scatter(anomaly_frames, 
-                                yaw_jerk[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
-                
-            axs[4, 1].plot(range(start_frame, end_frame-1), heading_jerk, 'g-', label='Heading Jerk')
-            axs[4, 1].set_title('Heading Jerk')
-            axs[4, 1].set_xlabel('Frame')
-            axs[4, 1].set_ylabel('Heading Jerk (rad/s²)')
+        if len(anomaly_frames) > 0:
+            axs[2, 0].scatter(anomaly_frames, 
+                            yaw[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
+        
+        # 6. 偏转角变化率图
+        axs[2, 1].plot(range(start_frame, end_frame), yaw_rate, 'g-', label='Yaw Rate')
+        axs[2, 1].set_title(f'Yaw Rate')
+        axs[2, 1].set_xlabel('Frame')
+        axs[2, 1].set_ylabel('Yaw Rate (rad/s)')
 
-            if len(anomaly_frames) > 0:
-                axs[4, 1].scatter(anomaly_frames, 
-                                heading_jerk[anomaly_frames - start_frame], 
-                                color='red', marker='x', s=100, label='Anomaly Frames')
+        if len(anomaly_frames) > 0:
+            axs[2, 1].scatter(anomaly_frames, 
+                            yaw_rate[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
 
-            for ax in axs.flat:
-                ax.set_xlim(start_frame, end_frame)
-                ax.grid(True)
-                ax.legend()
+        # 7. 偏转角变化率图
+        axs[3, 0].plot(range(start_frame, end_frame+1), heading, 'b-', label='Heading')
+        axs[3, 0].set_title(f'Heading')
+        axs[3, 0].set_xlabel('Frame')
+        axs[3, 0].set_ylabel('Heading (rad)')
 
-            plt.tight_layout()
-            save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
-            os.makedirs(save_path, exist_ok=True)
-            plt.savefig(os.path.join(save_path, f"acc_{fragment_id}_{ego_id}.png"))
-            plt.close()
-            plt.show()
+        if len(anomaly_frames) > 0:
+            axs[3, 0].scatter(anomaly_frames, 
+                            heading[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
+        # 8. 偏转角变化率图
+        axs[3, 1].plot(range(start_frame, end_frame), heading_rate, 'g-', label='Heading Rate')
+        axs[3, 1].set_title(f'Heading Rate')
+        axs[3, 1].set_xlabel('Frame')
+        axs[3, 1].set_ylabel('Heading Rate (rad/s)')
+
+        if len(anomaly_frames) > 0:
+            axs[3, 1].scatter(anomaly_frames, 
+                            heading_rate[anomaly_frames - start_frame], 
+                            color='red', marker='x', s=100, label='Anomaly Frames')
+
+        for ax in axs.flat:
+            ax.set_xlim(start_frame, end_frame)
+            ax.grid(True)
+            ax.legend()
+
+        plt.tight_layout()
+        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, f"acc_{fragment_id}_{ego_id}.png"))
+        plt.close()
+        plt.show()
 
     def visualize_causal_graph(self, causal_graph, fragment_id, ego_id, save_pic=True, save_pdf=False):
         """
@@ -477,6 +510,8 @@ class CausalAnalyzer:
             if node_info:
                 agent_type, agent_class, cross_type, signal_violation, retrograde_type = node_info
                 node_label = f"{node}\n{agent_class}\n"
+                
+                # 添加违规信息（如果有）
                 if cross_type:
                     for ct in cross_type:
                         if ct != "Normal":
@@ -563,7 +598,7 @@ class CausalAnalyzer:
         visited_nodes.add(ego_id)
         
         if visualize_acc and depth == 0:
-            self.analyze_track(fragment_id, ego_id)
+            self.visualize_acceleration_analysis(fragment_id, ego_id)
         
         ssm_dataframe = self.compute_ssm(fragment_id, ego_id, anomaly_frames_child)
         anomaly_frames = ssm_dataframe["anomaly_frames"]
@@ -572,16 +607,24 @@ class CausalAnalyzer:
 
         # Initialize a dictionary to store critical conditions for each SSM
         critical_conditions = {
+            # "ttc": [],
+            # "drac": [],
+            # "psd": [],
             "tadv": [],
             "ttc2d": [],
             "act": [],
+            # "distance": []
         }
 
         # Define critical thresholds for each SSM
         critical_thresholds = {
+            # "ttc": TTC_CRITICAL_THRESHOLD,
+            # "drac": DRAC_CRITICAL_THRESHOLD,
+            # "psd": PSD_CRITICAL_THRESHOLD,
             "tadv": TADV_CRITICAL_THRESHOLD,
             "ttc2d": TTC_CRITICAL_THRESHOLD,
             "act": ACT_CRITICAL_THRESHOLD,
+            # "distance": DISTANCE_CRITICAL_THRESHOLD
         }
 
         # 存储每个交互对象的第一个关键帧
@@ -592,7 +635,7 @@ class CausalAnalyzer:
         for ssm in safety_metrics_list:
             for tp_id, ssm_values in ssm_dataframe[ssm+"_values"].items():
                 # Determine if the SSM values are critical
-                if ssm in ["tadv", "ttc2d", "act"]:  # Lower is critical
+                if ssm in ["ttc", "psd", "tadv", "ttc2d", "act"]:  # Lower is critical
                     is_critical = [value < critical_thresholds[ssm] for value in ssm_values]
                 else:  # Higher is critical for "drac"
                     is_critical = [value > critical_thresholds[ssm] for value in ssm_values]
@@ -606,28 +649,16 @@ class CausalAnalyzer:
                     critical_frames = [start_frame_tp + i for i in critical_frames_indices]
                     
                     # Only keep critical frames that occur within 5 frames before and after anomaly frames
-                    # AND where distance is less than 30 meters
-                    # AND both agents have sufficient speed
+                    # AND where distance is less than 15 meters
                     relevant_critical_frames = []
                     for cf_idx, cf in enumerate(critical_frames):
                         for af in anomaly_frames:
                             if abs(cf - af) <= 20:  # 2s
                                 # Check distance at this critical frame
                                 distance_idx = critical_frames_indices[cf_idx]
-                                if distance_idx < len(ssm_dataframe["distance_values"][tp_id]) and ssm_dataframe["distance_values"][tp_id][distance_idx] < 30.0:
-                                    # relevant_critical_frames.append(cf)
-                                    vx_i = self.frame_data_processed[fragment_id][cf][ego_id]['vx']
-                                    vy_i = self.frame_data_processed[fragment_id][cf][ego_id]['vy']
-                                    ego_speed = np.hypot(vx_i, vy_i)
-
-                                    vx_j = self.frame_data_processed[fragment_id][cf][tp_id]['vx']
-                                    vy_j = self.frame_data_processed[fragment_id][cf][tp_id]['vy']
-                                    tp_speed = np.hypot(vx_j, vy_j)
-
-                                    agent_type, agent_class, cross_type, signal_violation, retrograde_type = self.get_agent_info(fragment_id, tp_id)
-                                    if (ego_speed > 1.0 and tp_speed > 1.0) or agent_type == 'ped':
-                                        relevant_critical_frames.append(cf)
-                                        break
+                                if distance_idx < len(ssm_dataframe["distance_values"][tp_id]) and ssm_dataframe["distance_values"][tp_id][distance_idx] < 15.0:
+                                    relevant_critical_frames.append(cf)
+                                    break
                     
                     if relevant_critical_frames and len(relevant_critical_frames) > 10:
                         critical_conditions[ssm].append((tp_id, is_critical, relevant_critical_frames))
@@ -669,39 +700,7 @@ class CausalAnalyzer:
                     for p_id, edges in parent_graph.items():
                         if p_id not in complete_causal_graph:
                             complete_causal_graph[p_id] = []
-                        
-                        for target_id, ssm, critical_frames in edges:
-                            # 检查是否已存在边（无论方向）
-                            edge_exists = False
-                            existing_edge_idx = -1
-                            parent_id, child_id = None, None
-                            
-                            # 检查正向边
-                            for idx, (existing_target, existing_ssm, existing_frames) in enumerate(complete_causal_graph[p_id]):
-                                if existing_target == target_id and existing_ssm == ssm:
-                                    edge_exists = True
-                                    existing_edge_idx = idx
-                                    parent_id, child_id = p_id, target_id
-                                    break
-                            
-                            # 检查反向边
-                            if not edge_exists and target_id in complete_causal_graph:
-                                for idx, (existing_target, existing_ssm, existing_frames) in enumerate(complete_causal_graph[target_id]):
-                                    if existing_target == p_id and existing_ssm == ssm:
-                                        edge_exists = True
-                                        existing_edge_idx = idx
-                                        parent_id, child_id = target_id, p_id
-                                        break
-                            
-                            if edge_exists:
-                                # 合并关键帧
-                                if existing_edge_idx >= 0:
-                                    existing_frames = complete_causal_graph[parent_id][existing_edge_idx][2]
-                                    merged_frames = sorted(list(set(existing_frames + critical_frames)))
-                                    complete_causal_graph[parent_id][existing_edge_idx] = (child_id, ssm, merged_frames)
-                            else:
-                                # 添加新边
-                                complete_causal_graph[p_id].append((target_id, ssm, critical_frames))
+                        complete_causal_graph[p_id].extend(edges)
         
         # 只在顶层调用时可视化和保存完整因果图
         if depth == 0 and visualize_cg:
