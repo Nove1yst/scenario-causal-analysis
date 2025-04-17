@@ -65,6 +65,7 @@ class CausalAnalyzer:
 
     def set_fragment_id(self, fragment_id):
         self.fragment_id = fragment_id
+        self.fragment_data = self.frame_data_processed[fragment_id]
 
     def prepare_ssm_dataframe(self, ego_id, anomaly_frames_child=None):
         """
@@ -592,7 +593,7 @@ class CausalAnalyzer:
 
         save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
         os.makedirs(save_path, exist_ok=True)     
-        dot_path = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}")
+        dot_path = os.path.join(save_path, f"risk_events_{fragment_id}_{ego_id}")
         if save_pic:
             dot.render(dot_path, format='png', cleanup=True)
             print(f"Risk events saved to {dot_path}.png")
@@ -721,9 +722,23 @@ class CausalAnalyzer:
                             if abs(cf - af) <= 20:  # 2s
                                 # Check distance at this critical frame
                                 distance_idx = critical_frames_indices[cf_idx]
-                                if distance_idx < len(ssm_dataframe["distance_values"][tp_id]) and ssm_dataframe["distance_values"][tp_id][distance_idx] < 15.0:
-                                    relevant_critical_frames.append(cf)
-                                    break
+                                if distance_idx < len(ssm_dataframe["distance_values"][tp_id]) and ssm_dataframe["distance_values"][tp_id][distance_idx] < 30.0:
+                                    # relevant_critical_frames.append(cf)
+                                    vx_i = self.fragment_data[cf][ego_id]['vx']
+                                    vy_i = self.fragment_data[cf][ego_id]['vy']
+                                    ego_speed = np.hypot(vx_i, vy_i)
+
+                                    vx_j = self.fragment_data[cf][tp_id]['vx']
+                                    vy_j = self.fragment_data[cf][tp_id]['vy']
+                                    tp_speed = np.hypot(vx_j, vy_j)
+
+                                    agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = self.get_agent_info(tp_id)
+
+                                    # Only detect moving agents, unless the agent is a pedestrian.
+                                    # Filter with regard to speed.
+                                    if ego_speed > 1.0 and (tp_speed > 1.0 or agent_type == 'ped'):
+                                        relevant_critical_frames.append(cf)
+                                        break
                     
                     if relevant_critical_frames and len(relevant_critical_frames) > 10:
                         critical_conditions[ssm].append((tp_id, is_critical, relevant_critical_frames))
@@ -762,7 +777,6 @@ class CausalAnalyzer:
                 # 合并父节点的因果图到完整因果图
                 if parent_graph:
                     for p_id, edges in parent_graph.items():
-                        # TODO: This may lead to bugs.
                         if p_id not in risk_events:
                             risk_events[p_id] = []
                         
@@ -825,6 +839,10 @@ class CausalAnalyzer:
                 parent_id, child_id = p_id, t_id
                 edges.add((parent_id, child_id))
 
+                if p_class == 'ped':
+                    parent_id, child_id = p_id, t_id
+                    edge_attr.append(f"{parent_id}: invasive behavior")
+
                 if t_sv:
                     for sv in t_sv:
                         if sv != "No violation of traffic lights":
@@ -844,8 +862,13 @@ class CausalAnalyzer:
                         parent_id, child_id = p_id, t_id
                         edge_attr.append(f"{parent_id}: {p_rt}")
 
-                if p_cd is not None and t_cd is not None:
-                    edge_attr.append(check_conflict(p_cd, t_cd))
+                # TODO: determine unusual behavior
+                if p_ct is None or t_ct is None:
+                    edge_attr.append('unusual behavior')
+
+                # If the conflict cannot be described for now, then check for potential crossing lanes.
+                if len(edge_attr) == 0:
+                    edge_attr.append(check_conflict(p_cd, t_cd, p_ct, t_ct))
 
                 if parent_id not in self.cg.keys():
                     self.cg[parent_id] = []
@@ -965,7 +988,7 @@ class CausalAnalyzer:
             dot.render(dot_path, format='pdf', cleanup=True)
             print(f"Causal graph saved to {dot_path}.pdf")
 
-    def load_cg(self, fragment_id, ego_id):
+    def load_risk_events(self, fragment_id, ego_id):
         """
         读取保存的因果图数据。
 
@@ -977,18 +1000,18 @@ class CausalAnalyzer:
             加载的因果图数据字典
         """
         save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
-        causal_graph_file = os.path.join(save_path, f"complete_cg_data_{fragment_id}_{ego_id}.pkl")
+        risk_events_file = os.path.join(save_path, f"risk_events_data_{fragment_id}_{ego_id}.pkl")
         
-        if not os.path.exists(causal_graph_file):
-            print(f"Causal graph file not found: {causal_graph_file}")
+        if not os.path.exists(risk_events_file):
+            print(f"Risk events file not found: {risk_events_file}")
             return None
         
         try:
-            with open(causal_graph_file, "rb") as f:
+            with open(risk_events_file, "rb") as f:
                 causal_graph = pickle.load(f)
-            print(f"Successfully loaded causal graph: {causal_graph_file}")
+            print(f"Successfully loaded risk events: {risk_events_file}")
             self.risk_events = causal_graph
             self.fragment_id = fragment_id
         except Exception as e:
-            print(f"Error loading causal graph: {e}")
+            print(f"Error loading risk events: {e}")
         

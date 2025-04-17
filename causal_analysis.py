@@ -32,24 +32,23 @@ if __name__ == "__main__":
         fragment_id = fragment_id_list[0]
         ego_id = ego_id_dict[fragment_id][3]
         causal_analyzer.set_fragment_id(fragment_id)
-        causal_analyzer.detect_risk(ego_id, 
-                                    visualize_acc=True, 
-                                    visualize_ssm=True, 
-                                    visualize_cg=True, 
-                                    depth=0, max_depth=1)
-        causal_analyzer.load_cg(fragment_id, ego_id)
+        # causal_analyzer.detect_risk(ego_id, 
+        #                             visualize_acc=True, 
+        #                             visualize_ssm=True, 
+        #                             visualize_cg=True, 
+        #                             depth=0, max_depth=1)
+        causal_analyzer.load_risk_events(fragment_id, ego_id)
         causal_analyzer.extract_cg()
         causal_analyzer.visualize_cg(ego_id)
     else:
         for fragment_id in fragment_id_list:
             for ego_id in ego_id_dict[fragment_id]:
                 causal_analyzer.set_fragment_id(fragment_id)
-                causal_analyzer.detect_risk(ego_id, 
-                                            depth=0, max_depth=args.depth,
-                                            visualize_acc=True,
-                                            visualize_cg=True,
-                                            visualize_ssm=True)
-                # causal_analyzer.load_cg(fragment_id, ego_id)
+                # causal_analyzer.detect_risk(ego_id, 
+                #                             depth=0, max_depth=args.depth,
+                #                             visualize_acc=True,
+                #                             visualize_cg=True,
+                #                             visualize_ssm=True)
+                causal_analyzer.load_risk_events(fragment_id, ego_id)
                 causal_analyzer.extract_cg()
                 causal_analyzer.visualize_cg(ego_id)
-                # causal_analyzer.visualize_causal_graph(fragment_id, ego_id)
