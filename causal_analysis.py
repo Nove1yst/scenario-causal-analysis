@@ -4,21 +4,10 @@
 """
 import os
 import sys
-import json
-import glob
-import math
 import argparse
-import pickle
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-from matplotlib.animation import FuncAnimation
-from matplotlib.patches import FancyArrowPatch
 
 sys.path.append(os.getcwd())
-from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
-from ssm.src.geometry_utils import CurrentD
 from src.causal_analyzer import CausalAnalyzer
 
 fragment_id_list = ['7_28_1 R21', '8_10_1 R18', '8_10_2 R19', '8_11_1 R20']
@@ -38,14 +27,29 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     causal_analyzer = CausalAnalyzer(args.data_dir, args.output_dir)
+    causal_analyzer.load_data()
     if args.debug:
-        causal_analyzer.load_data()
-        causal_analyzer.analyze(fragment_id_list[0], ego_id_dict[fragment_id_list[0]][3], visualize_acc=True, visualize_ssm=True, visualize_cg=True, depth=0, max_depth=1)
+        fragment_id = fragment_id_list[0]
+        ego_id = ego_id_dict[fragment_id][3]
+        causal_analyzer.set_fragment_id(fragment_id)
+        causal_analyzer.detect_risk(ego_id, 
+                                    visualize_acc=True, 
+                                    visualize_ssm=True, 
+                                    visualize_cg=True, 
+                                    depth=0, max_depth=1)
+        causal_analyzer.load_cg(fragment_id, ego_id)
+        causal_analyzer.extract_cg()
+        causal_analyzer.visualize_cg(ego_id)
     else:
-        causal_analyzer.load_data()
         for fragment_id in fragment_id_list:
             for ego_id in ego_id_dict[fragment_id]:
-                causal_analyzer.visualize_acceleration_analysis(fragment_id, ego_id)
-                causal_analyzer.analyze(fragment_id, ego_id, depth=0, max_depth=args.depth)
-                # cg = causal_analyzer.load_causal_graph(fragment_id, ego_id)
-                # causal_analyzer.visualize_causal_graph(cg, fragment_id, ego_id)
+                causal_analyzer.set_fragment_id(fragment_id)
+                causal_analyzer.detect_risk(ego_id, 
+                                            depth=0, max_depth=args.depth,
+                                            visualize_acc=True,
+                                            visualize_cg=True,
+                                            visualize_ssm=True)
+                # causal_analyzer.load_cg(fragment_id, ego_id)
+                causal_analyzer.extract_cg()
+                causal_analyzer.visualize_cg(ego_id)
+                # causal_analyzer.visualize_causal_graph(fragment_id, ego_id)

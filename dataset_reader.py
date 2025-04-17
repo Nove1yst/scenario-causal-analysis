@@ -44,6 +44,8 @@ if __name__ == "__main__":
     #     self.frame_data_processed = pickle.load(f)
 
     meta_data_dict = {
+        "agent_type": set(),
+        "agent_class": set(),
         "signal_violation_behavior": set(),
         "cross_type": set(),
         "retrograde_type": set(),
@@ -54,22 +56,25 @@ if __name__ == "__main__":
         for id in fragment_data.keys():
             # print(id)
             track_data = fragment_data[id]
+            agent_type = track_data['Type']
+            meta_data_dict['agent_type'].add(agent_type)
+
+            agent_class = track_data['Class']
+            meta_data_dict['agent_class'].add(agent_class)
+
             if track_data['Signal_Violation_Behavior'] is not None:
                 for signal_violation_behavior in track_data['Signal_Violation_Behavior']:
-                    if signal_violation_behavior not in meta_data_dict['signal_violation_behavior']:
-                        meta_data_dict['signal_violation_behavior'].add(signal_violation_behavior)
+                    meta_data_dict['signal_violation_behavior'].add(signal_violation_behavior)
             if track_data['CrossType'] is not None:
+                # CrossType value is an array. Must be iterated over.
                 for cross_type in track_data['CrossType']:
-                    if cross_type not in meta_data_dict['cross_type']:
-                        meta_data_dict['cross_type'].add(cross_type)
+                    meta_data_dict['cross_type'].add(cross_type)
             if 'retrograde_type' in track_data.keys():
-                for retrograde_type in track_data['retrograde_type']:
-                    if retrograde_type not in meta_data_dict['retrograde_type']:
-                        meta_data_dict['retrograde_type'].add(retrograde_type)
+                retrograde_type = track_data['retrograde_type']
+                meta_data_dict['retrograde_type'].add(retrograde_type)
             if 'cardinal direction' in track_data.keys():
-                for cardinal_direction in track_data['cardinal direction']:
-                    if cardinal_direction not in meta_data_dict['cardinal_direction']:
-                        meta_data_dict['cardinal_direction'].add(cardinal_direction)
+                cardinal_direction = track_data['cardinal direction']
+                meta_data_dict['cardinal_direction'].add(cardinal_direction)
             # if track_data['CrossType'] not in meta_data_dict['cross_type']:
             #     meta_data_dict['cross_type'].add(track_data['CrossType'])
             # if track_data['retrograde_type'] not in meta_data_dict['retrograde_type']:

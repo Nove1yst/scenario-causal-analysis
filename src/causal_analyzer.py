@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
+from src.utils import check_conflict
+from src.agent import Agent
 
 LATJ_THRESHOLD = 0.5 * 9.81  # 横向加加速度风险阈值
 LONJ_THRESHOLD = 1.2 * 9.81  # 纵向加加速度风险阈值
@@ -28,10 +30,17 @@ TADV_NORMAL_THRESHOLD = 10.0
 ACT_NORMAL_THRESHOLD = 10.0
 DISTANCE_NORMAL_THRESHOLD = 20.0
 
+critical_thresholds = {
+    "tadv": TADV_CRITICAL_THRESHOLD,
+    "ttc2d": TTC_CRITICAL_THRESHOLD,
+    "act": ACT_CRITICAL_THRESHOLD,
+    # "distance": DISTANCE_CRITICAL_THRESHOLD
+}
+
 safety_metrics_list = ['tadv', 'ttc2d', 'act']
 
 class CausalAnalyzer:
-    def __init__(self, data_dir, output_dir=None):
+    def __init__(self, data_dir, output_dir=None, fragment_id=None):
         """
         Args:
             data_dir: 数据目录路径
@@ -39,7 +48,10 @@ class CausalAnalyzer:
         """
         self.data_dir = data_dir
         self.output_dir = output_dir if output_dir else os.path.join(data_dir, 'analysis_results')
+        self.risk_events = None
         os.makedirs(self.output_dir, exist_ok=True)
+
+        self.fragment_id = fragment_id if fragment_id is not None else None
         
     def load_data(self):
         with open(os.path.join(self.data_dir, "track_change_tj.pkl"), "rb") as f:
@@ -51,7 +63,10 @@ class CausalAnalyzer:
         with open(os.path.join(self.data_dir, "frame_data_tj_processed.pkl"), "rb") as f:
             self.frame_data_processed = pickle.load(f)
 
-    def prepare_ssm_dataframe(self, fragment_id, ego_id, anomaly_frames_child=None):
+    def set_fragment_id(self, fragment_id):
+        self.fragment_id = fragment_id
+
+    def prepare_ssm_dataframe(self, ego_id, anomaly_frames_child=None):
         """
         Prepare the dataframe for SSM calculation
         
@@ -62,6 +77,7 @@ class CausalAnalyzer:
         Returns:
             The dataframe for SSM calculation
         """
+        fragment_id = self.fragment_id
         if anomaly_frames_child is not None:
             start_frame = self.tp_info[fragment_id][ego_id]['State']['frame_id'].iloc[0]
             end_frame = self.tp_info[fragment_id][ego_id]['State']['frame_id'].iloc[-1]
@@ -70,10 +86,6 @@ class CausalAnalyzer:
                 for anomaly_frame in anomaly_frames_child:
                     anomaly_frames_id.update(range(max((start_frame, anomaly_frame-10)), min(end_frame, anomaly_frame+1)))
                 anomaly_frames_id = sorted(list(anomaly_frames_id))
-                # if anomaly_frames_child.min() - 10 > start_frame:
-                    # anomaly_frames_id = list(set(anomaly_frames_id).union(range(anomaly_frames_child.min()-10, anomaly_frames_child.min())))
-                # if anomaly_frames_child.max() + 10 < end_frame:
-                    # anomaly_frames_id = list(set(anomaly_frames_id).union(range(anomaly_frames_child.max()+1, anomaly_frames_child.max()+10)))
                 start_frame = np.max([start_frame, np.min(anomaly_frames_id) - 30])
                 end_frame = np.min([end_frame, np.max(anomaly_frames_id)+1])
             else: # Should not come here
@@ -86,12 +98,9 @@ class CausalAnalyzer:
             start_frame = np.max([start_frame, np.min(anomaly_frames_id) - 30])
             end_frame = np.min([end_frame, np.max(anomaly_frames_id)+1])
 
-        # if end_frame in anomaly_frames_id:
-        #     anomaly_frames_id = anomaly_frames_id[:-1]
-
         return self.frame_data_processed[fragment_id][start_frame: end_frame+1], anomaly_frames_id, start_frame, end_frame
     
-    def compute_ssm(self, fragment_id, ego_id, anomaly_frames_child=None):
+    def compute_ssm(self, ego_id, anomaly_frames_child=None):
         """
         Compute Surrogate Safety Metrics (SSM)
         
@@ -102,7 +111,7 @@ class CausalAnalyzer:
         Returns:
             A dictionary containing the safety metrics
         """
-        df, anomaly_frames, ego_start_frame, ego_end_frame = self.prepare_ssm_dataframe(fragment_id, ego_id, anomaly_frames_child)
+        df, anomaly_frames, ego_start_frame, ego_end_frame = self.prepare_ssm_dataframe(ego_id, anomaly_frames_child)
         if df is None:
             return None
         num_timesteps = len(df)
@@ -175,7 +184,7 @@ class CausalAnalyzer:
         
         safety_metrics = {
             "ego_id": ego_id,
-            "fragment_id": fragment_id,
+            "fragment_id": self.fragment_id,
             "anomaly_frames": anomaly_frames,
             "start_frame": start_frame,
             "end_frame": ego_end_frame,
@@ -187,7 +196,7 @@ class CausalAnalyzer:
 
         return safety_metrics
     
-    def get_agent_info(self, fragment_id, tp_id):
+    def get_agent_info(self, tp_id):
         """
         Get the information of the agent
         
@@ -195,6 +204,7 @@ class CausalAnalyzer:
             fragment_id: Scenario ID
             tp_id: Target vehicle ID
         """
+        fragment_id = self.fragment_id
         track = self.tp_info[fragment_id].get(tp_id, None)
         if track is None:
             return None
@@ -203,7 +213,8 @@ class CausalAnalyzer:
         cross_type = track['CrossType']
         signal_violation = track['Signal_Violation_Behavior']
         retrograde_type = track.get('retrograde_type', None)
-        return (agent_type, agent_class, cross_type, signal_violation, retrograde_type)
+        cardinal_direction = track.get('cardinal direction', None)
+        return (agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction)
 
     def visualize_ssm(self, safety_metrics):
         """
@@ -217,7 +228,6 @@ class CausalAnalyzer:
         start_frame = safety_metrics['start_frame'][safety_metrics['ego_id']]
         end_frame = safety_metrics['end_frame']
         anomaly_frames = safety_metrics['anomaly_frames']
-        # frame_range = np.arange(start_frame, end_frame + 1)
 
         for i, tp_id in enumerate(safety_metrics['tadv_values'].keys()):
             frame_range = np.arange(start_frame, start_frame + len(safety_metrics['tadv_values'][tp_id]))
@@ -273,7 +283,7 @@ class CausalAnalyzer:
         plt.close()
         plt.show()
     
-    def visualize_acceleration_analysis(self, fragment_id, ego_id):
+    def visualize_acceleration_analysis(self, ego_id):
         """
         创建加速度和加加速度的详细分析图
         
@@ -282,11 +292,11 @@ class CausalAnalyzer:
             agent_idx: 代理索引
             save_path: 保存路径
         """
-        df, anomaly_frames, start_frame, end_frame = self.prepare_ssm_dataframe(fragment_id, ego_id)
+        fragment_id = self.fragment_id
+        df, anomaly_frames, start_frame, end_frame = self.prepare_ssm_dataframe(ego_id)
         if df is None:
             return None
         num_timesteps = len(df)
-        num_agents = len(df[0].keys())
         longitudinal_jerk = np.zeros(num_timesteps-1)
         lateral_jerk = np.zeros(num_timesteps-1)
 
@@ -451,25 +461,15 @@ class CausalAnalyzer:
                             heading_rate[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
 
-        for ax in axs.flat:
-            ax.set_xlim(start_frame, end_frame)
-            ax.grid(True)
-            ax.legend()
-
         axs[4, 0].plot(range(start_frame, end_frame-1), yaw_acc, 'g-', label='Yaw Accleration')
         axs[4, 0].set_title(f'Yaw Acceleration')
         axs[4, 0].set_xlabel('Frame')
         axs[4, 0].set_ylabel('Yaw Acceleration (rad/s²)')
 
         if len(anomaly_frames) > 0:
-            axs[3, 1].scatter(anomaly_frames, 
+            axs[4, 0].scatter(anomaly_frames, 
                             heading_rate[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-
-        for ax in axs.flat:
-            ax.set_xlim(start_frame, end_frame)
-            ax.grid(True)
-            ax.legend()
 
         axs[4, 1].plot(range(start_frame, end_frame-1), heading_acc, 'g-', label='Heading Acceleration')
         axs[4, 1].set_title(f'Heading Acceleration')
@@ -477,7 +477,7 @@ class CausalAnalyzer:
         axs[4, 1].set_ylabel('Heading Acceleration (rad/s²)')
 
         if len(anomaly_frames) > 0:
-            axs[3, 1].scatter(anomaly_frames, 
+            axs[4, 1].scatter(anomaly_frames, 
                             heading_rate[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
 
@@ -493,7 +493,7 @@ class CausalAnalyzer:
         plt.close()
         plt.show()
 
-    def visualize_causal_graph(self, causal_graph, fragment_id, ego_id, save_pic=True, save_pdf=False):
+    def visualize_risk_events(self, ego_id, save_pic=True, save_pdf=False):
         """
         使用Graphviz可视化因果图，避免边标签重合和节点重合问题。
         如果两个节点之间已经存在边，则合并边标签而不是添加新边。
@@ -512,7 +512,12 @@ class CausalAnalyzer:
             print("Also need to install system-level Graphviz: https://graphviz.org/download/")
             return
         
-        dot = graphviz.Digraph(comment=f'Causal Graph for Fragment {fragment_id}, Ego {ego_id}')
+        if self.risk_events is None:
+            print("Causal graph does not exist. Please extract causal graph before visualization.")
+            return
+        
+        fragment_id = self.fragment_id
+        dot = graphviz.Digraph(comment=f'Risk Events for Fragment {fragment_id}, Ego {ego_id}')
         dot.attr(rankdir='LR', size='12,8', dpi='300', fontname='Arial', 
                  bgcolor='white', concentrate='true')
         
@@ -521,11 +526,11 @@ class CausalAnalyzer:
                  width='1.0', height='1.0', penwidth='1.0', fixedsize='true')
         
         dot.attr('edge', color='black', fontname='Arial', fontsize='12', fontcolor='darkred',
-                 penwidth='1.0', arrowsize='0.5', arrowhead='normal')
+                 penwidth='1.0', arrowsize='0.5', arrowhead='none')  # No arrow since the behavioral graph is undir
         
         # 收集所有节点
         all_nodes = set()
-        for agent, influenced_agents in causal_graph.items():
+        for agent, influenced_agents in self.risk_events.items():
             all_nodes.add(agent)
             for influenced_agent, _, _ in influenced_agents:
                 all_nodes.add(influenced_agent)
@@ -533,9 +538,9 @@ class CausalAnalyzer:
         # 添加节点
         for node in all_nodes:
             # 获取节点信息
-            node_info = self.get_agent_info(fragment_id, node)
+            node_info = self.get_agent_info(node)
             if node_info:
-                agent_type, agent_class, cross_type, signal_violation, retrograde_type = node_info
+                agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = node_info
                 node_label = f"{node}\n{agent_class}\n"
                 
                 # 添加违规信息（如果有）
@@ -562,27 +567,23 @@ class CausalAnalyzer:
         edge_dict = {}
         
         # 收集所有边和标签
-        for agent, influenced_agents in causal_graph.items():
+        for agent, influenced_agents in self.risk_events.items():
             for influenced_agent, ssm_type, critical_frames in influenced_agents:
                 edge_key = (str(agent), str(influenced_agent))
                 edge_label = f"{ssm_type}: {critical_frames[0]}-{critical_frames[-1]}"
                 
                 if edge_key in edge_dict:
-                    # 如果边已存在，合并标签
                     edge_dict[edge_key].append(edge_label)
                 else:
-                    # 如果边不存在，创建新标签列表
                     edge_dict[edge_key] = [edge_label]
         
         # 添加边，合并标签
         for (src, dst), labels in edge_dict.items():
-            # 如果有多个标签，用分隔线连接它们
             if len(labels) > 1:
                 combined_label = "\n".join(labels)
             else:
                 combined_label = labels[0]
             
-            # 添加边，使用合并后的标签
             dot.edge(src, dst, label=combined_label, minlen='2')
         
         dot.attr(label=f'Graph (Fragment: {fragment_id}, Ego: {ego_id})')
@@ -594,12 +595,63 @@ class CausalAnalyzer:
         dot_path = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}")
         if save_pic:
             dot.render(dot_path, format='png', cleanup=True)
-            print(f"Causal graph saved to {dot_path}.png")
+            print(f"Risk events saved to {dot_path}.png")
         if save_pdf:
             dot.render(dot_path, format='pdf', cleanup=True)
-            print(f"Causal graph saved to {dot_path}.pdf")
+            print(f"Risk events saved to {dot_path}.pdf")
 
-    def analyze(self, fragment_id, ego_id, anomaly_frames_child=None, visualize_acc=False, visualize_ssm=False, visualize_cg=True, visited_nodes=None, depth=0, max_depth=3):
+    def print_risk_events(self, ego_id):
+        fragment_id = self.fragment_id
+        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+        os.makedirs(save_path, exist_ok=True)
+        complete_causal_graph_data_file = os.path.join(save_path, f"risk_events_data_{fragment_id}_{ego_id}.pkl")
+        with open(complete_causal_graph_data_file, "wb") as f:
+            pickle.dump(self.risk_events, f)
+        
+        causal_graph_file = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}.txt")
+        with open(causal_graph_file, "w") as f:
+            f.write(f"Fragment ID: {fragment_id}\n")
+            f.write(f"Ego ID: {ego_id}\n")
+            
+            # Add agent information
+            ego_info = self.get_agent_info(ego_id)
+            if ego_info:
+                agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = ego_info
+                f.write(f"Ego Type: {agent_type}, Class: {agent_class}\n")
+                f.write(f"Ego CrossType: {cross_type}, SignalViolation: {signal_violation}, RetrogradeType: {retrograde_type}\n")
+            
+            f.write("\nRisk Events:\n")
+            for tp_id, edges in self.risk_events.items():
+                f.write(f"\nTarget vehicle {tp_id}:\n")
+                
+                # 添加目标车辆信息
+                tp_info = self.get_agent_info(tp_id)
+                if tp_info:
+                    agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = tp_info
+                    f.write(f"  Type: {agent_type}, Class: {agent_class}\n")
+                    f.write(f"  CrossType: {cross_type}, SignalViolation: {signal_violation}, RetrogradeType: {retrograde_type}\n")
+                
+                for target_id, ssm, critical_frames in edges:
+                    f.write(f"  - Influences: {target_id}\n")
+                    
+                    # 添加被影响车辆信息
+                    if target_id != ego_id:
+                        target_info = self.get_agent_info(target_id)
+                        if target_info:
+                            agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = target_info
+                            f.write(f"    Target Type: {agent_type}, Class: {agent_class}\n")
+                            f.write(f"    Target CrossType: {cross_type}, SignalViolation: {signal_violation}, RetrogradeType: {retrograde_type}\n")
+                    
+                    f.write(f"  - Safety metric: {ssm}\n")
+                    f.write(f"  - Critical frames: {critical_frames[:5]}")
+                    if len(critical_frames) > 5:
+                        f.write(f" ... (total {len(critical_frames)} frames)")
+                    f.write("\n")
+        
+        print(f"Complete graph saved to {causal_graph_file}")
+        print(f"Graph data saved to {complete_causal_graph_data_file}")
+
+    def detect_risk(self, ego_id, anomaly_frames_child=None, visualize_acc=False, visualize_ssm=False, visualize_cg=True, visited_nodes=None, depth=0, max_depth=3):
         """
         创建描述代理之间因果关系的因果图，通过分析安全指标，并迭代地寻找父节点
         
@@ -625,33 +677,19 @@ class CausalAnalyzer:
         visited_nodes.add(ego_id)
         
         if visualize_acc and depth == 0:
-            self.visualize_acceleration_analysis(fragment_id, ego_id)
+            self.visualize_acceleration_analysis(ego_id)
         
-        ssm_dataframe = self.compute_ssm(fragment_id, ego_id, anomaly_frames_child)
+        ssm_dataframe = self.compute_ssm(ego_id, anomaly_frames_child)
         anomaly_frames = ssm_dataframe["anomaly_frames"]
         if visualize_ssm and depth == 0:
             self.visualize_ssm(ssm_dataframe)
 
         # Initialize a dictionary to store critical conditions for each SSM
         critical_conditions = {
-            # "ttc": [],
-            # "drac": [],
-            # "psd": [],
             "tadv": [],
             "ttc2d": [],
             "act": [],
             # "distance": []
-        }
-
-        # Define critical thresholds for each SSM
-        critical_thresholds = {
-            # "ttc": TTC_CRITICAL_THRESHOLD,
-            # "drac": DRAC_CRITICAL_THRESHOLD,
-            # "psd": PSD_CRITICAL_THRESHOLD,
-            "tadv": TADV_CRITICAL_THRESHOLD,
-            "ttc2d": TTC_CRITICAL_THRESHOLD,
-            "act": ACT_CRITICAL_THRESHOLD,
-            # "distance": DISTANCE_CRITICAL_THRESHOLD
         }
 
         # 存储每个交互对象的第一个关键帧
@@ -696,22 +734,21 @@ class CausalAnalyzer:
                             first_critical_frames[tp_id] = min(relevant_critical_frames)
 
         # 创建带边属性的因果图
-        causal_graph = {}
+        r_evt = {}
         for ssm, conditions in critical_conditions.items():
             for tp_id, is_critical, critical_frames in conditions:
                 if critical_frames:
-                    if tp_id not in causal_graph:
-                        causal_graph[tp_id] = []
-                    causal_graph[tp_id].append((ego_id, ssm, critical_frames))
+                    if tp_id not in r_evt:
+                        r_evt[tp_id] = []
+                    r_evt[tp_id].append((ego_id, ssm, critical_frames))
 
         # 递归地为每个父节点构建因果树
-        complete_causal_graph = causal_graph.copy()
-        for parent_id in causal_graph.keys():
+        risk_events = r_evt.copy()
+        for parent_id in r_evt.keys():
             # 使用父节点的第一个关键帧作为其异常帧
             if parent_id in first_critical_frames:
                 # 递归调用analyze函数，将父节点作为新的ego_id
-                parent_graph = self.analyze(
-                    fragment_id, 
+                parent_graph = self.detect_risk(
                     parent_id, 
                     anomaly_frames_child=[first_critical_frames[parent_id]],
                     visualize_acc=False, 
@@ -726,8 +763,8 @@ class CausalAnalyzer:
                 if parent_graph:
                     for p_id, edges in parent_graph.items():
                         # TODO: This may lead to bugs.
-                        if p_id not in complete_causal_graph:
-                            complete_causal_graph[p_id] = []
+                        if p_id not in risk_events:
+                            risk_events[p_id] = []
                         
                         for target_id, ssm, critical_frames in edges:
                             # 检查是否已存在边（无论方向）
@@ -737,7 +774,7 @@ class CausalAnalyzer:
                             child_id = None
                             
                             # 检查正向边
-                            for idx, (existing_target, existing_ssm, existing_frames) in enumerate(complete_causal_graph[p_id]):
+                            for idx, (existing_target, existing_ssm, existing_frames) in enumerate(risk_events[p_id]):
                                 if existing_target == target_id and existing_ssm == ssm:
                                     edge_exists = True
                                     existing_edge_idx = idx
@@ -746,8 +783,8 @@ class CausalAnalyzer:
                                     break
                             
                             # 检查反向边
-                            if not edge_exists and target_id in complete_causal_graph:
-                                for idx, (existing_target, existing_ssm, existing_frames) in enumerate(complete_causal_graph[target_id]):
+                            if not edge_exists and target_id in risk_events:
+                                for idx, (existing_target, existing_ssm, existing_frames) in enumerate(risk_events[target_id]):
                                     if existing_target == p_id and existing_ssm == ssm:
                                         edge_exists = True
                                         existing_edge_idx = idx
@@ -758,84 +795,177 @@ class CausalAnalyzer:
                             if edge_exists:
                                 # 合并关键帧
                                 if existing_edge_idx >= 0:
-                                    existing_frames = complete_causal_graph[parent_id][existing_edge_idx][2]
+                                    existing_frames = risk_events[parent_id][existing_edge_idx][2]
                                     merged_frames = sorted(list(set(existing_frames + critical_frames)))
-                                    complete_causal_graph[parent_id][existing_edge_idx] = (child_id, ssm, merged_frames)
+                                    risk_events[parent_id][existing_edge_idx] = (child_id, ssm, merged_frames)
                             else:
                                 # 添加新边
-                                complete_causal_graph[p_id].append((target_id, ssm, critical_frames))
+                                risk_events[p_id].append((target_id, ssm, critical_frames))
         
         # 只在顶层调用时可视化和保存完整因果图
-        if depth == 0 and visualize_cg:
-            self.visualize_causal_graph(complete_causal_graph, fragment_id, ego_id)
-
-            save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
-            os.makedirs(save_path, exist_ok=True)
-            complete_causal_graph_data_file = os.path.join(save_path, f"complete_cg_data_{fragment_id}_{ego_id}.pkl")
-            with open(complete_causal_graph_data_file, "wb") as f:
-                pickle.dump(complete_causal_graph, f)
-            
-            causal_graph_file = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}.txt")
-            with open(causal_graph_file, "w") as f:
-                f.write(f"Fragment ID: {fragment_id}\n")
-                f.write(f"Ego ID: {ego_id}\n")
-                
-                # Add agent information
-                ego_info = self.get_agent_info(fragment_id, ego_id)
-                if ego_info:
-                    agent_type, agent_class, cross_type, signal_violation, retrograde_type = ego_info
-                    f.write(f"Ego Type: {agent_type}, Class: {agent_class}\n")
-                    f.write(f"Ego CrossType: {cross_type}, SignalViolation: {signal_violation}, RetrogradeType: {retrograde_type}\n")
-                
-                f.write("\nCausal Graph:\n")
-                for tp_id, edges in complete_causal_graph.items():
-                    f.write(f"\nTarget vehicle {tp_id}:\n")
-                    
-                    # 添加目标车辆信息
-                    tp_info = self.get_agent_info(fragment_id, tp_id)
-                    if tp_info:
-                        agent_type, agent_class, cross_type, signal_violation, retrograde_type = tp_info
-                        f.write(f"  Type: {agent_type}, Class: {agent_class}\n")
-                        f.write(f"  CrossType: {cross_type}, SignalViolation: {signal_violation}, RetrogradeType: {retrograde_type}\n")
-                    
-                    for target_id, ssm, critical_frames in edges:
-                        f.write(f"  - Influences: {target_id}\n")
-                        
-                        # 添加被影响车辆信息（如果不是自车）
-                        if target_id != ego_id:
-                            target_info = self.get_agent_info(fragment_id, target_id)
-                            if target_info:
-                                agent_type, agent_class, cross_type, signal_violation, retrograde_type = target_info
-                                f.write(f"    Target Type: {agent_type}, Class: {agent_class}\n")
-                                f.write(f"    Target CrossType: {cross_type}, SignalViolation: {signal_violation}, RetrogradeType: {retrograde_type}\n")
-                        
-                        f.write(f"  - Safety metric: {ssm}\n")
-                        f.write(f"  - Critical frames: {critical_frames[:5]}")
-                        if len(critical_frames) > 5:
-                            f.write(f" ... (total {len(critical_frames)} frames)")
-                        f.write("\n")
-                        
-                        # 添加距离信息
-                        if tp_id in ssm_dataframe["distance_values"] and target_id == ego_id:
-                            f.write(f"  - Distances at critical frames: [")
-                            distances = []
-                            for cf in critical_frames[:5]:  # 只显示前5帧以避免输出过多
-                                if tp_id in ssm_dataframe["start_frame"]:
-                                    start_frame_tp = ssm_dataframe["start_frame"][tp_id]
-                                    cf_idx = cf - start_frame_tp
-                                    if 0 <= cf_idx < len(ssm_dataframe["distance_values"][tp_id]):
-                                        distances.append(f"{ssm_dataframe['distance_values'][tp_id][cf_idx]:.2f}m")
-                            f.write(", ".join(distances))
-                            if len(critical_frames) > 5:
-                                f.write(", ...")
-                            f.write("]\n")
-            
-            print(f"Complete graph saved to {causal_graph_file}")
-            print(f"Graph data saved to {complete_causal_graph_data_file}")
+        if depth == 0:
+            self.risk_events = risk_events
         
-        return complete_causal_graph
+        if depth == 0 and visualize_cg:
+            self.visualize_risk_events(ego_id)
+            self.print_risk_events(ego_id)
+        
+        return risk_events
+    
+    def extract_cg(self):
+        self.cg = {}
+        edges = set()
 
-    def load_causal_graph(self, fragment_id, ego_id):
+        for p_id, influence in self.risk_events.items():
+            for t_id, ssm, critical_frames in influence:
+                p_type, p_class, p_ct, p_sv, p_rt, p_cd = self.get_agent_info(p_id)
+                t_type, t_class, t_ct, t_sv, t_rt, t_cd = self.get_agent_info(t_id)
+
+                edge_attr = []
+                parent_id, child_id = p_id, t_id
+                edges.add((parent_id, child_id))
+
+                if t_sv:
+                    for sv in t_sv:
+                        if sv != "No violation of traffic lights":
+                            parent_id, child_id = t_id, p_id
+                            edge_attr.append(f"{parent_id}: {sv}")
+                if p_sv:
+                    for sv in p_sv: 
+                        if sv != "No violation of traffic lights":
+                            parent_id, child_id = p_id, t_id
+                            edge_attr.append(f"{parent_id}: {sv}")
+
+                if p_rt is not None and t_rt is not None:
+                    if t_rt != "normal":
+                        parent_id, child_id = t_id, p_id
+                        edge_attr.append(f"{parent_id}: {t_rt}")
+                    if p_rt != "normal":
+                        parent_id, child_id = p_id, t_id
+                        edge_attr.append(f"{parent_id}: {p_rt}")
+
+                if p_cd is not None and t_cd is not None:
+                    edge_attr.append(check_conflict(p_cd, t_cd))
+
+                if parent_id not in self.cg.keys():
+                    self.cg[parent_id] = []
+                    self.cg[parent_id].append((child_id, edge_attr)) 
+                else:
+                    has_edge = False
+                    for c, _ in self.cg[parent_id]:
+                        if child_id == c:
+                            has_edge = True
+                            break
+                    if not has_edge:
+                        self.cg[parent_id].append((child_id, edge_attr))
+
+    def visualize_cg(self, ego_id, save_pic=True, save_pdf=False):
+        """
+        使用Graphviz可视化因果图，避免边标签重合和节点重合问题。
+        如果两个节点之间已经存在边，则合并边标签而不是添加新边。
+
+        Args:
+            causal_graph: 表示因果图的字典，键为代理ID，值为它们影响的代理ID列表。
+            fragment_id: 片段ID
+            ego_id: 自车ID
+            save_pic: 是否保存PNG格式图片
+            save_pdf: 是否保存PDF格式图片
+        """
+        try:
+            import graphviz
+        except ImportError:
+            print("Please install graphviz: pip install graphviz")
+            print("Also need to install system-level Graphviz: https://graphviz.org/download/")
+            return
+        
+        if self.risk_events is None:
+            print("Causal graph does not exist. Please extract causal graph before visualization.")
+            return
+        
+        fragment_id = self.fragment_id
+        dot = graphviz.Digraph(comment=f'Causal Graph for Fragment {fragment_id}, Ego {ego_id}')
+        dot.attr(rankdir='LR', size='12,8', dpi='300', fontname='Arial', 
+                 bgcolor='white', concentrate='true')
+        
+        dot.attr('node', shape='circle', style='filled', color='black', 
+                 fillcolor='skyblue', fontname='Arial', fontsize='10', fontcolor='black',
+                 width='1.0', height='1.0', penwidth='1.0', fixedsize='true')
+        
+        dot.attr('edge', color='black', fontname='Arial', fontsize='12', fontcolor='darkred',
+                 penwidth='1.0', arrowsize='0.5', arrowhead='normal')
+        # style='curved'
+        
+        # 收集所有节点
+        all_nodes = set()
+        for agent, influenced_agents in self.cg.items():
+            all_nodes.add(agent)
+            for influenced_agent, _ in influenced_agents:
+                all_nodes.add(influenced_agent)
+        
+        # 添加节点
+        for node in all_nodes:
+            # 获取节点信息
+            node_info = self.get_agent_info(node)
+            if node_info:
+                agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = node_info
+                node_label = f"{node}\n{agent_class}\n"
+                
+                # 添加违规信息（如果有）
+                if cross_type:
+                    for ct in cross_type:
+                        if ct != "Normal":
+                            node_label += f"{ct}\n"
+                if cardinal_direction is not None:
+                    node_label += f"{cardinal_direction}\n"
+                # if signal_violation:
+                    # for sv in signal_violation:
+                        # if sv != "No violation of traffic lights":
+                            # node_label += f"{sv}\n"
+                # if retrograde_type and retrograde_type != "normal" and retrograde_type != "unknown":
+                    # node_label += f"\n{retrograde_type}"
+            else:
+                node_label = f"ID: {node}"
+            
+            if node == ego_id:
+                dot.node(str(node), node_label, fillcolor='lightcoral', fontcolor='white')
+            else:
+                dot.node(str(node), node_label)
+        
+        # 创建边字典，用于合并重复边的标签
+        edge_dict = {}
+        
+        # 收集所有边和标签
+        for agent, influenced_agents in self.cg.items():
+            for influenced_agent, edge_attr in influenced_agents:
+                edge_key = (str(agent), str(influenced_agent))
+                
+                if edge_key not in edge_dict:
+                    edge_dict[edge_key] = edge_attr
+        
+        # 添加边，合并标签
+        for (src, dst), labels in edge_dict.items():
+            if len(labels) > 0:
+                combined_label = "\n".join(labels)
+            else:
+                combined_label = "No obvious reason"
+            
+            dot.edge(src, dst, label=combined_label, minlen='2')
+        
+        dot.attr(label=f'Graph (Fragment: {fragment_id}, Ego: {ego_id})')
+        dot.attr(fontsize='20')
+        dot.attr(labelloc='t')
+
+        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+        os.makedirs(save_path, exist_ok=True)     
+        dot_path = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}")
+        if save_pic:
+            dot.render(dot_path, format='png', cleanup=True)
+            print(f"Causal graph saved to {dot_path}.png")
+        if save_pdf:
+            dot.render(dot_path, format='pdf', cleanup=True)
+            print(f"Causal graph saved to {dot_path}.pdf")
+
+    def load_cg(self, fragment_id, ego_id):
         """
         读取保存的因果图数据。
 
@@ -857,8 +987,8 @@ class CausalAnalyzer:
             with open(causal_graph_file, "rb") as f:
                 causal_graph = pickle.load(f)
             print(f"Successfully loaded causal graph: {causal_graph_file}")
-            return causal_graph
+            self.risk_events = causal_graph
+            self.fragment_id = fragment_id
         except Exception as e:
             print(f"Error loading causal graph: {e}")
-            return None
         
