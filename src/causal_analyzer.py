@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
-from src.utils import check_conflict
+from src.utils import check_conflict, is_uturn
 from src.agent import Agent
 
 LATJ_THRESHOLD = 0.5 * 9.81  # 横向加加速度风险阈值
@@ -839,8 +839,30 @@ class CausalAnalyzer:
                 parent_id, child_id = p_id, t_id
                 edges.add((parent_id, child_id))
 
-                if p_class == 'ped':
+                if p_ct:
+                    if p_ct == 'Others' and is_uturn(p_cd):
+                        p_ct = 'U-Turn'   
+                        parent_id, child_id = p_id, t_id                 
+                        edge_attr.append('U-turn conflict')
+                if t_ct:
+                    if t_ct == 'Others' and is_uturn(t_cd):
+                        t_ct = 'U-Turn'
+                        parent_id, child_id = t_id, p_id      
+                        edge_attr.append('U-turn conflict')
+
+                if p_ct == 'Others':
+                    # TODO: determine unusual behavior
                     parent_id, child_id = p_id, t_id
+                    edge_attr.append('unusual behavior')
+                elif t_ct == 'Others':
+                    parent_id, child_id = t_id, p_id
+                    edge_attr.append('unusual behavior')
+
+                if p_type == 'ped':
+                    parent_id, child_id = p_id, t_id
+                    edge_attr.append(f"{parent_id}: invasive behavior")
+                elif t_type == 'ped':
+                    parent_id, child_id = t_id, p_id
                     edge_attr.append(f"{parent_id}: invasive behavior")
 
                 if t_sv:
@@ -855,32 +877,146 @@ class CausalAnalyzer:
                             edge_attr.append(f"{parent_id}: {sv}")
 
                 if p_rt is not None and t_rt is not None:
-                    if t_rt != "normal":
+                    if t_rt != "normal" and t_rt != 'unknown':
                         parent_id, child_id = t_id, p_id
                         edge_attr.append(f"{parent_id}: {t_rt}")
-                    if p_rt != "normal":
+                    if p_rt != "normal" and p_rt != 'unknown':
                         parent_id, child_id = p_id, t_id
                         edge_attr.append(f"{parent_id}: {p_rt}")
 
-                # TODO: determine unusual behavior
-                if p_ct is None or t_ct is None:
-                    edge_attr.append('unusual behavior')
-
                 # If the conflict cannot be described for now, then check for potential crossing lanes.
                 if len(edge_attr) == 0:
-                    edge_attr.append(check_conflict(p_cd, t_cd, p_ct, t_ct))
+                    conflict = check_conflict(p_cd, t_cd, p_ct, t_ct)
+                    if conflict != 'parallel':
+                        edge_attr.append(conflict)
 
-                if parent_id not in self.cg.keys():
-                    self.cg[parent_id] = []
-                    self.cg[parent_id].append((child_id, edge_attr)) 
-                else:
-                    has_edge = False
-                    for c, _ in self.cg[parent_id]:
-                        if child_id == c:
-                            has_edge = True
-                            break
-                    if not has_edge:
-                        self.cg[parent_id].append((child_id, edge_attr))
+                # pruning: remove fake correlations
+                if len(edge_attr) > 0:
+                    if parent_id not in self.cg.keys():
+                        self.cg[parent_id] = []
+                        self.cg[parent_id].append((child_id, edge_attr)) 
+                    else:
+                        has_edge = False
+                        for c, _ in self.cg[parent_id]:
+                            if child_id == c:
+                                has_edge = True
+                                break
+                        if not has_edge:
+                            self.cg[parent_id].append((child_id, edge_attr))
+
+    def simplify_cg(self, ego_id):
+        """
+        简化因果图：
+        1. 只保留包含ego_id的连通子图
+        2. 从自车节点开始向上和向下追溯，只保留2层以及以内可追溯的节点
+        
+        Args:
+            ego_id: 自车ID
+        """
+        def find_connected_component(start_node, graph):
+            """
+            使用DFS找到包含start_node的连通子图
+            
+            Args:
+                start_node: 起始节点
+                graph: 原始图
+                
+            Returns:
+                包含start_node的连通子图
+            """
+            visited = set()
+            component = {}
+            
+            def dfs(node):
+                if node in visited:
+                    return
+                visited.add(node)
+                
+                # 处理从当前节点出发的边
+                if node in graph:
+                    component[node] = graph[node]
+                    for neighbor, _ in graph[node]:
+                        dfs(neighbor)
+                
+                # 处理指向当前节点的边
+                for parent, edges in graph.items():
+                    for neighbor, _ in edges:
+                        if neighbor == node and parent not in visited:
+                            dfs(parent)
+            
+            dfs(start_node)
+            return component
+
+        def limit_depth(start_node, graph, max_depth=2):
+            """
+            从start_node开始向上和向下追溯，只保留max_depth层以内的节点
+            
+            Args:
+                start_node: 起始节点
+                graph: 原始图
+                max_depth: 最大深度
+                
+            Returns:
+                深度限制后的子图
+            """
+            result = {}
+            visited = set()
+            depth_map = {start_node: 0}
+            
+            def dfs_up(node, current_depth):
+                """向上追溯父节点"""
+                if node in visited or current_depth > max_depth:
+                    return
+                visited.add(node)
+                
+                # 处理指向当前节点的边
+                for parent, edges in graph.items():
+                    for neighbor, _ in edges:
+                        if neighbor == node and parent not in visited:
+                            depth_map[parent] = current_depth + 1
+                            dfs_up(parent, current_depth + 1)
+            
+            def dfs_down(node, current_depth):
+                """向下追溯子节点"""
+                if node in visited or current_depth > max_depth:
+                    return
+                visited.add(node)
+                
+                # 处理从当前节点出发的边
+                if node in graph:
+                    for neighbor, _ in graph[node]:
+                        if neighbor not in visited:
+                            depth_map[neighbor] = current_depth + 1
+                            dfs_down(neighbor, current_depth + 1)
+            
+            # 从start_node开始向上追溯
+            dfs_up(start_node, 0)
+            visited.clear()  # 清除visited，准备向下追溯
+            
+            # 从start_node开始向下追溯
+            dfs_down(start_node, 0)
+            
+            # 只保留深度在max_depth以内的节点及其边
+            for node, depth in depth_map.items():
+                if depth <= max_depth and node in graph:
+                    result[node] = []
+                    for neighbor, edge_attr in graph[node]:
+                        if neighbor in depth_map and depth_map[neighbor] <= max_depth:
+                            result[node].append((neighbor, edge_attr))
+            
+            return result
+            
+        # 找到包含ego_id的连通子图
+        connected_component = find_connected_component(ego_id, self.cg)
+        
+        # 如果连通子图为空，说明ego_id不在任何连通子图中
+        if not connected_component:
+            print(f"Warning: ego_id {ego_id} is not in any connected component of the causal graph.")
+            self.cg = {}
+            return
+            
+        # 限制深度，只保留2层以内的节点
+        self.cg = limit_depth(ego_id, connected_component)
 
     def visualize_cg(self, ego_id, save_pic=True, save_pdf=False):
         """
