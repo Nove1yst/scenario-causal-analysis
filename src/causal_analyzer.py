@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
-from src.utils import check_conflict, is_uturn
+from src.utils import check_conflict, is_uturn, in_intersection
 from src.agent import Agent
 
 LATJ_THRESHOLD = 0.5 * 9.81  # 横向加加速度风险阈值
@@ -20,15 +20,17 @@ LONJ_THRESHOLD = 1.2 * 9.81  # 纵向加加速度风险阈值
 LAT_ACC_THRESHOLD = 2.0      # 横向加速度阈值
 LON_ACC_THRESHOLD = 3.0      # 纵向加速度阈值
 
-TTC_CRITICAL_THRESHOLD = 5.0   # TTC critical threshold
-TADV_CRITICAL_THRESHOLD = 5.0   # TADV critical threshold
+TTC_CRITICAL_THRESHOLD = 3.0   # TTC critical threshold
+TADV_CRITICAL_THRESHOLD = 3.0   # TADV critical threshold
 ACT_CRITICAL_THRESHOLD = 3.0    # ACT critical threshold
 # DISTANCE_CRITICAL_THRESHOLD = 20  # Distance critical threshold
 
 TTC_NORMAL_THRESHOLD = 10.0
 TADV_NORMAL_THRESHOLD = 10.0
 ACT_NORMAL_THRESHOLD = 10.0
-DISTANCE_NORMAL_THRESHOLD = 20.0
+DISTANCE_NORMAL_THRESHOLD = 10.0
+
+WIN_LEN = 30
 
 critical_thresholds = {
     "tadv": TADV_CRITICAL_THRESHOLD,
@@ -37,7 +39,7 @@ critical_thresholds = {
     # "distance": DISTANCE_CRITICAL_THRESHOLD
 }
 
-safety_metrics_list = ['tadv', 'ttc2d', 'act']
+safety_metrics_list = ['tadv', 'act']
 
 class CausalAnalyzer:
     def __init__(self, data_dir, output_dir=None, fragment_id=None):
@@ -185,7 +187,6 @@ class CausalAnalyzer:
         
         safety_metrics = {
             "ego_id": ego_id,
-            "fragment_id": self.fragment_id,
             "anomaly_frames": anomaly_frames,
             "start_frame": start_frame,
             "end_frame": ego_end_frame,
@@ -278,9 +279,9 @@ class CausalAnalyzer:
                 ax.axvline(x=frame, color='r', linestyle='--', alpha=0.5)
     
         plt.tight_layout()
-        save_path = os.path.join(self.output_dir, f"{safety_metrics['fragment_id']}_{safety_metrics['ego_id']}")
+        save_path = os.path.join(self.output_dir, f"{self.fragment_id}_{safety_metrics['ego_id']}")
         os.makedirs(save_path, exist_ok=True)
-        plt.savefig(os.path.join(save_path, f"ssm_{safety_metrics['fragment_id']}_{safety_metrics['ego_id']}.png"))
+        plt.savefig(os.path.join(save_path, f"ssm_{self.fragment_id}_{safety_metrics['ego_id']}.png"))
         plt.close()
         plt.show()
     
@@ -340,42 +341,10 @@ class CausalAnalyzer:
         axs[0, 0].set_title(f'Longitudinal Acceleration')
         axs[0, 0].set_xlabel('Frame')
         axs[0, 0].set_ylabel('Acceleration (m/s²)')
-        # 标记异常帧
         if len(anomaly_frames) > 0:
             axs[0, 0].scatter(anomaly_frames, 
                             a_lon[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        
-        # # 标记急刹车和急加速事件
-        # braking_events = range(start_frame, end_frame+1)[hard_braking_events]
-        # if len(braking_events) > 0:
-        #     axs[0, 0].scatter(braking_events, 
-        #                     longitudinal_acc[hard_braking_events], 
-        #                     color='red', label='Hard braking')
-        
-        # acceleration_events = time_steps[hard_acceleration_events]
-        # if len(acceleration_events) > 0:
-        #     axs[0, 0].scatter(acceleration_events, 
-        #                     longitudinal_acc[hard_acceleration_events], 
-        #                     color='orange', label='Hard acceleration')
-        
-        # # 添加舒适阈值线
-        # axs[0, 0].axhline(y=LON_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
-        # axs[0, 0].axhline(y=-LON_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
-        # axs[0, 0].text(0, LON_ACC_THRESHOLD+0.5, f'Comfort threshold (±{LON_ACC_THRESHOLD} m/s²)', color='r', alpha=0.7)
-        # axs[0, 0].legend()
-        
-        # # 标记急转弯事件
-        # turning_events = time_steps[hard_turning_events]
-        # if len(turning_events) > 0:
-        #     axs[0, 1].scatter(turning_events, 
-        #                     lateral_acc[hard_turning_events], 
-        #                     color='red', label='Hard turning')
-        
-        # # 添加舒适阈值线
-        # axs[0, 1].axhline(y=LAT_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
-        # axs[0, 1].axhline(y=-LAT_ACC_THRESHOLD, color='r', linestyle='--', alpha=0.5)
-        # axs[0, 1].text(0, LAT_ACC_THRESHOLD+0.5, f'Comfort threshold (±{LAT_ACC_THRESHOLD} m/s²)', color='r', alpha=0.7)
         
         # 2. 纵向加加速度图
         axs[0, 1].plot(range(start_frame, end_frame), longitudinal_jerk, 'b-', label='Longitudinal')
@@ -388,11 +357,6 @@ class CausalAnalyzer:
             axs[0, 1].scatter(anomaly_frames, 
                             longitudinal_jerk[anomaly_frames - start_frame], 
                             color='red', marker='x', s=100, label='Anomaly Frames')
-        # # 添加舒适阈值线
-        # axs[1, 0].axhline(y=LONJ_THRESHOLD, color='r', linestyle='--', alpha=0.5)
-        # axs[1, 0].axhline(y=-LONJ_THRESHOLD, color='r', linestyle='--', alpha=0.5)
-        # axs[1, 0].text(0, LONJ_THRESHOLD+0.5, f'Comfort threshold (±{LONJ_THRESHOLD} m/s³)', color='r', alpha=0.7)
-        # axs[1, 0].legend()
         
         # 3. 横向加速度图
         axs[1, 0].plot(range(start_frame, end_frame+1), a_lat, 'g-', label='Lateral')
@@ -544,13 +508,12 @@ class CausalAnalyzer:
                 agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = node_info
                 node_label = f"{node}\n{agent_class}\n"
                 
-                # 添加违规信息（如果有）
+                # 添加违规信息
                 if cross_type:
                     for ct in cross_type:
                         if ct != "Normal":
                             node_label += f"{ct}\n"
                 if signal_violation:
-                    # node_label += "\nSignal: "
                     for sv in signal_violation:
                         if sv != "No violation of traffic lights":
                             node_label += f"{sv}\n"
@@ -605,12 +568,12 @@ class CausalAnalyzer:
         fragment_id = self.fragment_id
         save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
         os.makedirs(save_path, exist_ok=True)
-        complete_causal_graph_data_file = os.path.join(save_path, f"risk_events_data_{fragment_id}_{ego_id}.pkl")
-        with open(complete_causal_graph_data_file, "wb") as f:
+        complete_risk_graph_data_file = os.path.join(save_path, f"risk_events_data_{fragment_id}_{ego_id}.pkl")
+        with open(complete_risk_graph_data_file, "wb") as f:
             pickle.dump(self.risk_events, f)
         
-        causal_graph_file = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}.txt")
-        with open(causal_graph_file, "w") as f:
+        risk_graph_file = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}.txt")
+        with open(risk_graph_file, "w") as f:
             f.write(f"Fragment ID: {fragment_id}\n")
             f.write(f"Ego ID: {ego_id}\n")
             
@@ -649,8 +612,8 @@ class CausalAnalyzer:
                         f.write(f" ... (total {len(critical_frames)} frames)")
                     f.write("\n")
         
-        print(f"Complete graph saved to {causal_graph_file}")
-        print(f"Graph data saved to {complete_causal_graph_data_file}")
+        print(f"Complete risk graph saved to {risk_graph_file}")
+        print(f"Risk graph data saved to {complete_risk_graph_data_file}")
 
     def detect_risk(self, ego_id, anomaly_frames_child=None, visualize_acc=False, visualize_ssm=False, visualize_cg=True, visited_nodes=None, depth=0, max_depth=3):
         """
@@ -676,6 +639,8 @@ class CausalAnalyzer:
         
         # 将当前节点标记为已访问
         visited_nodes.add(ego_id)
+        ego_info = self.get_agent_info(ego_id)
+        ego = Agent(ego_id, self.fragment_id, ego_info)
         
         if visualize_acc and depth == 0:
             self.visualize_acceleration_analysis(ego_id)
@@ -714,20 +679,31 @@ class CausalAnalyzer:
                     # The actual critical frames
                     critical_frames = [start_frame_tp + i for i in critical_frames_indices]
                     
-                    # Only keep critical frames that occur within 5 frames before and after anomaly frames
-                    # AND where distance is less than 15 meters
+                    # Only keep critical frames that occur within 30 frames before and after anomaly frames
+                    # AND where distance is less than DISTANCE_NORMAL_THRESHOLD meters
                     relevant_critical_frames = []
                     for cf_idx, cf in enumerate(critical_frames):
                         for af in anomaly_frames:
-                            if abs(cf - af) <= 20:  # 2s
+                            if abs(cf - af) <= WIN_LEN:  # 3s
                                 # Check distance at this critical frame
                                 distance_idx = critical_frames_indices[cf_idx]
-                                if distance_idx < len(ssm_dataframe["distance_values"][tp_id]) and ssm_dataframe["distance_values"][tp_id][distance_idx] < 30.0:
+
+                                # Only consider situations where both agents are in the intersection
+                                x_i, y_i = self.fragment_data[cf][ego_id]['x'], self.fragment_data[cf][ego_id]['y']
+                                x_j, y_j = self.fragment_data[cf][tp_id]['x'], self.fragment_data[cf][tp_id]['y']
+                                if not (in_intersection(x_i, y_i) and in_intersection(x_j, y_j)):
+                                    break
+
+                                if distance_idx < len(ssm_dataframe["distance_values"][tp_id]) and ssm_dataframe["distance_values"][tp_id][distance_idx] < DISTANCE_NORMAL_THRESHOLD:
                                     # relevant_critical_frames.append(cf)
+                                    x_i = self.fragment_data[cf][ego_id]['x']
+                                    y_i = self.fragment_data[cf][ego_id]['y']
                                     vx_i = self.fragment_data[cf][ego_id]['vx']
                                     vy_i = self.fragment_data[cf][ego_id]['vy']
                                     ego_speed = np.hypot(vx_i, vy_i)
 
+                                    x_j = self.fragment_data[cf][tp_id]['x']
+                                    y_j = self.fragment_data[cf][tp_id]['y']
                                     vx_j = self.fragment_data[cf][tp_id]['vx']
                                     vy_j = self.fragment_data[cf][tp_id]['vy']
                                     tp_speed = np.hypot(vx_j, vy_j)
@@ -740,13 +716,28 @@ class CausalAnalyzer:
                                         relevant_critical_frames.append(cf)
                                         break
                     
-                    if relevant_critical_frames and len(relevant_critical_frames) > 10:
-                        critical_conditions[ssm].append((tp_id, is_critical, relevant_critical_frames))
-                        critical_frames_child[tp_id] = relevant_critical_frames
+                    # 检查是否存在连续10帧
+                    continuous_frames = []
+                    temp_frames = []
+                    for i in range(len(relevant_critical_frames)):
+                        if i == 0 or relevant_critical_frames[i] == relevant_critical_frames[i-1] + 1:
+                            temp_frames.append(relevant_critical_frames[i])
+                        else:
+                            if len(temp_frames) >= 10:
+                                continuous_frames.extend(temp_frames)
+                            temp_frames = [relevant_critical_frames[i]]
+                    
+                    # 检查最后一组
+                    if len(temp_frames) >= 10:
+                        continuous_frames.extend(temp_frames)
+                        
+                    if continuous_frames:
+                        critical_conditions[ssm].append((tp_id, is_critical, continuous_frames))
+                        critical_frames_child[tp_id] = continuous_frames
                         
                         # 记录每个交互对象的第一个关键帧
-                        if tp_id not in first_critical_frames or min(relevant_critical_frames) < first_critical_frames[tp_id]:
-                            first_critical_frames[tp_id] = min(relevant_critical_frames)
+                        if tp_id not in first_critical_frames or min(continuous_frames) < first_critical_frames[tp_id]:
+                            first_critical_frames[tp_id] = min(continuous_frames)
 
         # 创建带边属性的因果图
         r_evt = {}
@@ -850,21 +841,6 @@ class CausalAnalyzer:
                         parent_id, child_id = t_id, p_id      
                         edge_attr.append('U-turn conflict')
 
-                if p_ct == 'Others':
-                    # TODO: determine unusual behavior
-                    parent_id, child_id = p_id, t_id
-                    edge_attr.append('unusual behavior')
-                elif t_ct == 'Others':
-                    parent_id, child_id = t_id, p_id
-                    edge_attr.append('unusual behavior')
-
-                if p_type == 'ped':
-                    parent_id, child_id = p_id, t_id
-                    edge_attr.append(f"{parent_id}: invasive behavior")
-                elif t_type == 'ped':
-                    parent_id, child_id = t_id, p_id
-                    edge_attr.append(f"{parent_id}: invasive behavior")
-
                 if t_sv:
                     for sv in t_sv:
                         if sv != "No violation of traffic lights":
@@ -886,11 +862,26 @@ class CausalAnalyzer:
 
                 # If the conflict cannot be described for now, then check for potential crossing lanes.
                 if len(edge_attr) == 0:
-                    conflict = check_conflict(p_cd, t_cd, p_ct, t_ct)
-                    if conflict != 'parallel':
-                        edge_attr.append(conflict)
+                    if p_type == 'ped':
+                        parent_id, child_id = p_id, t_id
+                        edge_attr.append(f"{parent_id}: invasive behavior")
+                    elif t_type == 'ped':
+                        parent_id, child_id = t_id, p_id
+                        edge_attr.append(f"{parent_id}: invasive behavior")
+                    else:
+                        if p_ct == 'Others':
+                            # TODO: determine unusual behavior
+                            parent_id, child_id = p_id, t_id
+                            edge_attr.append('unusual behavior')
+                        elif t_ct == 'Others':
+                            parent_id, child_id = t_id, p_id
+                            edge_attr.append('unusual behavior')
 
-                # pruning: remove fake correlations
+                        conflict = check_conflict(p_cd, t_cd, p_ct, t_ct)
+                        if conflict != 'parallel':
+                            edge_attr.append(conflict)
+
+                # pruning: remove unclassified fake correlations
                 if len(edge_attr) > 0:
                     if parent_id not in self.cg.keys():
                         self.cg[parent_id] = []
@@ -908,7 +899,7 @@ class CausalAnalyzer:
         """
         简化因果图：
         1. 只保留包含ego_id的连通子图
-        2. 从自车节点开始向上和向下追溯，只保留2层以及以内可追溯的节点
+        2. 从自车节点开始，深度<=2的节点（不论边方向）
         
         Args:
             ego_id: 自车ID
@@ -949,7 +940,7 @@ class CausalAnalyzer:
 
         def limit_depth(start_node, graph, max_depth=2):
             """
-            从start_node开始向上和向下追溯，只保留max_depth层以内的节点
+            从start_node开始，只保留深度<=max_depth的节点
             
             Args:
                 start_node: 起始节点
@@ -1052,7 +1043,6 @@ class CausalAnalyzer:
         
         dot.attr('edge', color='black', fontname='Arial', fontsize='12', fontcolor='darkred',
                  penwidth='1.0', arrowsize='0.5', arrowhead='normal')
-        # style='curved'
         
         # 收集所有节点
         all_nodes = set()
@@ -1126,7 +1116,7 @@ class CausalAnalyzer:
 
     def load_risk_events(self, fragment_id, ego_id):
         """
-        读取保存的因果图数据。
+        读取保存的风险数据。
 
         Args:
             fragment_id: 片段ID
@@ -1144,9 +1134,9 @@ class CausalAnalyzer:
         
         try:
             with open(risk_events_file, "rb") as f:
-                causal_graph = pickle.load(f)
+                risk_events = pickle.load(f)
             print(f"Successfully loaded risk events: {risk_events_file}")
-            self.risk_events = causal_graph
+            self.risk_events = risk_events
             self.fragment_id = fragment_id
         except Exception as e:
             print(f"Error loading risk events: {e}")

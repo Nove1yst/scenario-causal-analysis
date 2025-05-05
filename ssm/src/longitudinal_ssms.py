@@ -1,6 +1,6 @@
 import numpy as np
 import warnings
-from .geometry_utils import DTC_ij, CurrentD
+from .geometry_utils import D2C_ij, CurrentD
 
 
 def TTC(samples, toreturn='dataframe'):
@@ -8,7 +8,7 @@ def TTC(samples, toreturn='dataframe'):
         warnings.warn('Incorrect target to return. Please specify \'dataframe\' or \'values\'.')
     else:
         delta_v = np.sqrt((samples['vx_i']-samples['vx_j'])**2+(samples['vy_i']-samples['vy_j'])**2)
-        dtc_ij, leaving_ij = DTC_ij(samples)
+        dtc_ij, leaving_ij = D2C_ij(samples)
         ttc_ij = dtc_ij/delta_v
         ttc_ij[leaving_ij<20] = np.inf # inf means the two vehicles will not collide if they keep current velocity
         ttc_ij[(leaving_ij>20)&(leaving_ij%20!=0)] = -1 # -1 means the bounding boxes of the two vehicles are overlapping
@@ -18,7 +18,7 @@ def TTC(samples, toreturn='dataframe'):
         keys.extend(values)
         values.extend(keys)
         rename_dict = {keys[i]: values[i] for i in range(len(keys))}
-        dtc_ji, leaving_ji = DTC_ij(samples.rename(columns=rename_dict))
+        dtc_ji, leaving_ji = D2C_ij(samples.rename(columns=rename_dict))
         ttc_ji = dtc_ji/delta_v
         ttc_ji[leaving_ji<20] = np.inf
         ttc_ji[(leaving_ji>20)&(leaving_ji%20!=0)] = -1
@@ -36,7 +36,7 @@ def DRAC(samples, toreturn='dataframe'):
         warnings.warn('Incorrect target to return. Please specify \'dataframe\' or \'values\'.')
     else:
         delta_v = np.sqrt((samples['vx_i']-samples['vx_j'])**2+(samples['vy_i']-samples['vy_j'])**2)
-        dtc_ij, leaving_ij = DTC_ij(samples)
+        dtc_ij, leaving_ij = D2C_ij(samples)
         drac_ij = delta_v**2/dtc_ij/2
         drac_ij[leaving_ij<20] = 0. # the two vehicles will not collide if they keep current velocity
         drac_ij[(leaving_ij>20)&(leaving_ij%20!=0)] = -1 # -1 means the bounding boxes of the two vehicles are overlapping
@@ -46,7 +46,7 @@ def DRAC(samples, toreturn='dataframe'):
         keys.extend(values)
         values.extend(keys)
         rename_dict = {keys[i]: values[i] for i in range(len(keys))}
-        dtc_ji, leaving_ji = DTC_ij(samples.rename(columns=rename_dict))
+        dtc_ji, leaving_ji = D2C_ij(samples.rename(columns=rename_dict))
         drac_ji = delta_v**2/dtc_ji/2
         drac_ji[leaving_ji<20] = 0.
         drac_ji[(leaving_ji>20)&(leaving_ji%20!=0)] = -1
@@ -69,7 +69,7 @@ def MTTC(samples, toreturn='dataframe'):
         warnings.warn('Acceleration of the ego vehicle is not provided.')
     else:
         delta_v = np.sqrt((samples['vx_i']-samples['vx_j'])**2+(samples['vy_i']-samples['vy_j'])**2)
-        dtc_ij, leaving_ij = DTC_ij(samples)
+        dtc_ij, leaving_ij = D2C_ij(samples)
         ttc_ij = dtc_ij/delta_v
         ttc_ij[leaving_ij<20] = np.inf # inf means the two vehicles will not collide if they keep current velocity
         ttc_ij[(leaving_ij>20)&(leaving_ij%20!=0)] = -1 # -1 means the bounding boxes of the two vehicles are overlapping
@@ -79,7 +79,7 @@ def MTTC(samples, toreturn='dataframe'):
         keys.extend(values)
         values.extend(keys)
         rename_dict = {keys[i]: values[i] for i in range(len(keys))}
-        dtc_ji, leaving_ji = DTC_ij(samples.rename(columns=rename_dict))
+        dtc_ji, leaving_ji = D2C_ij(samples.rename(columns=rename_dict))
         ttc_ji = dtc_ji/delta_v
         ttc_ji[leaving_ji<20] = np.inf
         ttc_ji[(leaving_ji>20)&(leaving_ji%20!=0)] = -1
@@ -126,7 +126,7 @@ def PSD(samples, toreturn='dataframe', braking_dec=5.5):
         warnings.warn('Incorrect target to return. Please specify \'dataframe\' or \'values\'.')
     else:
         v_ego = np.sqrt(samples['vx_i']**2+samples['vy_i']**2)
-        dtc_ij, leaving_ij = DTC_ij(samples)
+        dtc_ij, leaving_ij = D2C_ij(samples)
         braking_dist = v_ego**2 / 2 / braking_dec
         psd = dtc_ij / braking_dist
         psd[leaving_ij<20] = 10. # the two vehicles will not collide if they keep current velocity
@@ -147,7 +147,7 @@ def TTC_DRAC_MTTC(samples, toreturn='dataframe'):
         warnings.warn('Acceleration of the ego vehicle is not provided.')
     else:
         delta_v = np.sqrt((samples['vx_i']-samples['vx_j'])**2+(samples['vy_i']-samples['vy_j'])**2)
-        dtc_ij, leaving_ij = DTC_ij(samples)
+        dtc_ij, leaving_ij = D2C_ij(samples)
         ttc_ij = dtc_ij/delta_v
         ttc_ij[leaving_ij<20] = np.inf # inf means the two vehicles will not collide if they keep current velocity
         ttc_ij[(leaving_ij>20)&(leaving_ij%20!=0)] = -1 # -1 means the bounding boxes of the two vehicles are overlapping
@@ -160,7 +160,7 @@ def TTC_DRAC_MTTC(samples, toreturn='dataframe'):
         keys.extend(values)
         values.extend(keys)
         rename_dict = {keys[i]: values[i] for i in range(len(keys))}
-        dtc_ji, leaving_ji = DTC_ij(samples.rename(columns=rename_dict))
+        dtc_ji, leaving_ji = D2C_ij(samples.rename(columns=rename_dict))
         ttc_ji = dtc_ji/delta_v
         ttc_ji[leaving_ji<20] = np.inf
         ttc_ji[(leaving_ji>20)&(leaving_ji%20!=0)] = -1

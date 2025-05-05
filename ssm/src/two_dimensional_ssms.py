@@ -56,11 +56,14 @@ def TAdv(samples, toreturn='dataframe'):
                 # if the two lines are parallel (threshold: 3 degrees), time advantage equals to TTC
                 angle_ij = angle(v_i[0], v_i[1], v_j[0], v_j[1]) # [-pi, pi]
                 parallel_lines = np.isnan(ist[0])|(abs(angle_ij)<(np.pi/60))|(abs(angle_ij)>(np.pi*59/60))
-                time_advantage[parallel_lines] = ttc[parallel_lines]
+                # time_advantage[parallel_lines] = ttc[parallel_lines]
+                # TODO: determine the true condition
+                # time_advantage[parallel_lines] = np.inf
                 # for unparallel cases, if the intersection point is not ahead of both vehicles, set time advantage to infinity
                 ist_ahead_i = ((ist[0]-point_i[0])*v_i[0]+(ist[1]-point_i[1])*v_i[1]) >= 0
                 ist_ahead_j = ((ist[0]-point_j[0])*v_j[0]+(ist[1]-point_j[1])*v_j[1]) >= 0
-                time_advantage[(~parallel_lines)&(~(ist_ahead_i&ist_ahead_j))] = np.inf
+                # time_advantage[(~parallel_lines)&(~(ist_ahead_i&ist_ahead_j))] = np.inf
+                time_advantage[~(ist_ahead_i&ist_ahead_j)] = np.inf
                 # for parallel cases, cases when ttc<0 has already been set to infinity
                 # append the time advantage
                 tadv_mat.append(time_advantage)

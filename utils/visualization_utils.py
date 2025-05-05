@@ -179,7 +179,7 @@ def plot_vehicle_positions(track_id, track_info, frame_info, scene_id, frame_id,
     # 绘制网格
     ax.grid(True, which='both', linestyle='--', linewidth=0.5)
 
-    # 添加道路绘制逻辑（假设 plot_roads 函数已定义）
+    # 添加道路绘制逻辑
     plot_roads(ax)
 
     # rm.draw_map(ax)

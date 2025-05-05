@@ -66,6 +66,7 @@ class Agent:
         self.cross_type = agent_info[2]
         self.signal_violations = agent_info[3]
         self.retrograde_type = agent_info[4]
+        self.cardinal_direction = agent_info[5]
         
         # Trajectory data
         # self.frames = []

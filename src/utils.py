@@ -1,5 +1,33 @@
 import re
 
+def are_velocities_parallel(vx_i, vy_i, vx_j, vy_j):
+    '''
+    判断速度是否平行。
+    '''
+    cross_product = abs(vx_i * vy_j - vy_i * vx_j)
+    epsilon = 1e-6  # 浮点误差容忍度
+    return cross_product < epsilon
+
+def are_vectors_collinear(x_i, y_i, vx_i, vy_i, x_j, y_j, vx_j, vy_j):
+    # 首先判断速度向量是否平行
+    if not are_velocities_parallel(vx_i, vy_i, vx_j, vy_j):
+        return False
+    
+    # 如果平行，再判断两点连线是否与速度向量平行
+    # 计算从点i到点j的向量
+    dx = x_j - x_i
+    dy = y_j - y_i
+    
+    # 判断连线向量与速度向量是否平行
+    # 两个非零向量中任选一个比较即可
+    if abs(vx_i) > abs(vy_i):  # 使用x分量较大的速度分量
+        return are_velocities_parallel(vx_i, vy_i, dx, dy)
+    else:
+        return are_velocities_parallel(vx_i, vy_i, dx, dy)
+
+def in_intersection(x, y):
+    return (x < 57.5) and (x > -27.5) and (y > -10) and (y < 45)
+
 def is_opposite(dir1, dir2):
     if (dir1 == 'n' and dir2 == 's') or (dir1 == 's' and dir2 == 'n') or (dir1 == 'w' and dir2 == 'e') or (dir1 == 'e' and dir2 == 'w'):
         return True
@@ -65,8 +93,6 @@ def check_conflict(str1, str2, ct1, ct2):
     Returns:
         str: The type of interaction between the two trajectories
     """
-    # TODO: determine conflict type mainly from CrossType
-    # 使用之前定义的函数提取轨迹信息
     cd1 = extract_direction(str1)
     cd2 = extract_direction(str2)
     

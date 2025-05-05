@@ -17,9 +17,6 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import FancyArrowPatch
 
 sys.path.append(os.getcwd())
-from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
-from ssm.src.geometry_utils import CurrentD
-from src.causal_analyzer import CausalAnalyzer
 
 fragment_id_list = ['7_28_1 R21', '8_10_1 R18', '8_10_2 R19', '8_11_1 R20']
 ego_id_dict = {
@@ -43,6 +40,8 @@ if __name__ == "__main__":
     # with open(os.path.join(self.data_dir, "frame_data_tj_processed.pkl"), "rb") as f:
     #     self.frame_data_processed = pickle.load(f)
 
+    import json
+
     meta_data_dict = {
         "agent_type": set(),
         "agent_class": set(),
@@ -51,6 +50,9 @@ if __name__ == "__main__":
         "retrograde_type": set(),
         "cardinal_direction": set()
     }
+
+    unclassified = set()
+
     for fragment_id in fragment_id_list:
         fragment_data = tp_info[fragment_id]
         for id in fragment_data.keys():
@@ -67,14 +69,21 @@ if __name__ == "__main__":
                     meta_data_dict['signal_violation_behavior'].add(signal_violation_behavior)
             if track_data['CrossType'] is not None:
                 # CrossType value is an array. Must be iterated over.
+                # len(CrossType) <= 1          
                 for cross_type in track_data['CrossType']:
                     meta_data_dict['cross_type'].add(cross_type)
+                
             if 'retrograde_type' in track_data.keys():
                 retrograde_type = track_data['retrograde_type']
                 meta_data_dict['retrograde_type'].add(retrograde_type)
+
             if 'cardinal direction' in track_data.keys():
                 cardinal_direction = track_data['cardinal direction']
                 meta_data_dict['cardinal_direction'].add(cardinal_direction)
+
+                if 'NaN' in cardinal_direction:
+                    unclassified.add((fragment_id, id, cardinal_direction))
+                    
             # if track_data['CrossType'] not in meta_data_dict['cross_type']:
             #     meta_data_dict['cross_type'].add(track_data['CrossType'])
             # if track_data['retrograde_type'] not in meta_data_dict['retrograde_type']:
@@ -83,5 +92,6 @@ if __name__ == "__main__":
             #     meta_data_dict['cardinal_direction'].add(track_data['cardinal direction'])
 
     print(meta_data_dict)
-            
+    print()
+    print(unclassified)
         

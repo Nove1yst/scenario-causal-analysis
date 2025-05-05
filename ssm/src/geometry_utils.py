@@ -1,9 +1,6 @@
 import numpy as np
 import warnings
 
-motor_vehicles = {'car', 'bus', 'truck'}
-non_motor_vehicles = {'bicycle', 'tricycle', 'motorcycle'}
-
 def line(point0, point1):
     '''
     Get the line equation from two points: ax+by+c=0.
@@ -237,7 +234,7 @@ def CurrentD(samples, toreturn='dataframe'):
             return cdist
 
 
-def DTC_ij(samples):
+def D2C_ij(samples):
     '''
     Compute the distance to collision and mark whether the two vehicles are leaving each other.
     '''
