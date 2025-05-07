@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
-from src.utils import check_conflict, is_uturn, in_intersection
+from src.utils import check_conflict, is_uturn, in_intersection, is_following, is_head_on
 from src.agent import Agent
 
 LATJ_THRESHOLD = 0.5 * 9.81  # 横向加加速度风险阈值
@@ -23,7 +23,7 @@ LON_ACC_THRESHOLD = 3.0      # 纵向加速度阈值
 TTC_CRITICAL_THRESHOLD = 3.0   # TTC critical threshold
 TADV_CRITICAL_THRESHOLD = 3.0   # TADV critical threshold
 ACT_CRITICAL_THRESHOLD = 3.0    # ACT critical threshold
-# DISTANCE_CRITICAL_THRESHOLD = 20  # Distance critical threshold
+DISTANCE_CRITICAL_THRESHOLD = 1.5  # Distance critical threshold
 
 TTC_NORMAL_THRESHOLD = 10.0
 TADV_NORMAL_THRESHOLD = 10.0
@@ -36,10 +36,18 @@ critical_thresholds = {
     "tadv": TADV_CRITICAL_THRESHOLD,
     "ttc2d": TTC_CRITICAL_THRESHOLD,
     "act": ACT_CRITICAL_THRESHOLD,
-    # "distance": DISTANCE_CRITICAL_THRESHOLD
+    "distance": DISTANCE_CRITICAL_THRESHOLD
 }
 
-safety_metrics_list = ['tadv', 'act']
+safety_metrics_list = ['tadv', 'act', 'distance']
+
+head2tail_types = ['following', 'diverging', 'converging', 'crossing conflict: same cross type']
+head2head_types = ['left turn and straight cross conflict: same side', 
+                   'left turn and straight cross conflict: opposite side', 
+                   'right turn and straight cross conflict: start side', 
+                   'right turn and straight cross conflict: end side', 
+                   'left turn and right turn conflict: start side', 
+                   'left turn and right turn conflict: end side']
 
 class CausalAnalyzer:
     def __init__(self, data_dir, output_dir=None, fragment_id=None):
@@ -655,7 +663,7 @@ class CausalAnalyzer:
             "tadv": [],
             "ttc2d": [],
             "act": [],
-            # "distance": []
+            "distance": []
         }
 
         # 存储每个交互对象的第一个关键帧
@@ -666,7 +674,7 @@ class CausalAnalyzer:
         for ssm in safety_metrics_list:
             for tp_id, ssm_values in ssm_dataframe[ssm+"_values"].items():
                 # Determine if the SSM values are critical
-                if ssm in ["ttc", "psd", "tadv", "ttc2d", "act"]:  # Lower is critical
+                if ssm in ["ttc", "psd", "tadv", "ttc2d", "act", "distance"]:  # Lower is critical
                     is_critical = [value < critical_thresholds[ssm] for value in ssm_values]
                 else:  # Higher is critical for "drac"
                     is_critical = [value > critical_thresholds[ssm] for value in ssm_values]
@@ -700,19 +708,25 @@ class CausalAnalyzer:
                                     y_i = self.fragment_data[cf][ego_id]['y']
                                     vx_i = self.fragment_data[cf][ego_id]['vx']
                                     vy_i = self.fragment_data[cf][ego_id]['vy']
+                                    ax_i = self.fragment_data[cf][ego_id]['ax']
+                                    ay_i = self.fragment_data[cf][ego_id]['ay']
                                     ego_speed = np.hypot(vx_i, vy_i)
+                                    ego_accel = np.hypot(ax_i, ay_i)
 
                                     x_j = self.fragment_data[cf][tp_id]['x']
                                     y_j = self.fragment_data[cf][tp_id]['y']
                                     vx_j = self.fragment_data[cf][tp_id]['vx']
                                     vy_j = self.fragment_data[cf][tp_id]['vy']
+                                    ax_j = self.fragment_data[cf][tp_id]['ax']
+                                    ay_j = self.fragment_data[cf][tp_id]['ay']
                                     tp_speed = np.hypot(vx_j, vy_j)
+                                    tp_accel = np.hypot(ax_j, ay_j)
 
                                     agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = self.get_agent_info(tp_id)
 
                                     # Only detect moving agents, unless the agent is a pedestrian.
-                                    # Filter with regard to speed.
-                                    if ego_speed > 1.0 and (tp_speed > 1.0 or agent_type == 'ped'):
+                                    # Filter with regard to speed and acceleration.
+                                    if (ego_speed > 1.0 and (tp_speed > 1.0 or agent_type == 'ped')) or (ego_accel > 0.001 and tp_accel > 0.001):
                                         relevant_critical_frames.append(cf)
                                         break
                     
@@ -826,73 +840,107 @@ class CausalAnalyzer:
                 p_type, p_class, p_ct, p_sv, p_rt, p_cd = self.get_agent_info(p_id)
                 t_type, t_class, t_ct, t_sv, t_rt, t_cd = self.get_agent_info(t_id)
 
+                # Assume no causal relationship between pedestrians
+                if p_type == 'ped' and t_type == 'ped':
+                    break
+
                 edge_attr = []
                 parent_id, child_id = p_id, t_id
                 edges.add((parent_id, child_id))
+                rt_flag, sv_flag = False, False
+                conflict = 'unknown'
 
+                if p_ct and t_ct and p_ct != 'Others' and t_ct != 'Others':
+                    conflict = check_conflict(p_cd, t_cd, p_ct, t_ct)
+                    # if conflict != 'parallel':
+                    # TODO: revise the lane conflict detection logic
+                    # For now, do not check
+                    edge_attr.append(conflict)
                 if p_ct:
                     if p_ct == 'Others' and is_uturn(p_cd):
                         p_ct = 'U-Turn'   
                         parent_id, child_id = p_id, t_id                 
                         edge_attr.append('U-turn conflict')
+                    elif p_ct == 'Others':
+                        parent_id, child_id = p_id, t_id                        
+                        edge_attr.append('unusual cross type')
                 if t_ct:
                     if t_ct == 'Others' and is_uturn(t_cd):
                         t_ct = 'U-Turn'
                         parent_id, child_id = t_id, p_id      
                         edge_attr.append('U-turn conflict')
+                    elif t_ct == 'Others':
+                        parent_id, child_id = t_id, p_id
+                        edge_attr.append('unusual cross type')
 
                 if t_sv:
                     for sv in t_sv:
                         if sv != "No violation of traffic lights":
                             parent_id, child_id = t_id, p_id
                             edge_attr.append(f"{parent_id}: {sv}")
+                            sv_flag = True
                 if p_sv:
                     for sv in p_sv: 
                         if sv != "No violation of traffic lights":
                             parent_id, child_id = p_id, t_id
                             edge_attr.append(f"{parent_id}: {sv}")
+                            sv_flag = True
 
                 if p_rt is not None and t_rt is not None:
                     if t_rt != "normal" and t_rt != 'unknown':
                         parent_id, child_id = t_id, p_id
                         edge_attr.append(f"{parent_id}: {t_rt}")
+                        rt_flag = True
                     if p_rt != "normal" and p_rt != 'unknown':
                         parent_id, child_id = p_id, t_id
                         edge_attr.append(f"{parent_id}: {p_rt}")
+                        rt_flag = True
 
-                # If the conflict cannot be described for now, then check for potential crossing lanes.
-                if len(edge_attr) == 0:
+                # The retrograding agent must be the cause for the conflict.
+                if not rt_flag:
+                    # If there is no traffic violations, the pedstrian should be the cause.
                     if p_type == 'ped':
-                        parent_id, child_id = p_id, t_id
-                        edge_attr.append(f"{parent_id}: invasive behavior")
-                    elif t_type == 'ped':
-                        parent_id, child_id = t_id, p_id
-                        edge_attr.append(f"{parent_id}: invasive behavior")
-                    else:
-                        if p_ct == 'Others':
-                            # TODO: determine unusual behavior
+                        if not sv_flag:
                             parent_id, child_id = p_id, t_id
-                            edge_attr.append('unusual behavior')
-                        elif t_ct == 'Others':
+                            edge_attr.append(f"{parent_id}: invasive behavior")
+                    elif t_type == 'ped':
+                        if not sv_flag:
                             parent_id, child_id = t_id, p_id
-                            edge_attr.append('unusual behavior')
+                            edge_attr.append(f"{parent_id}: invasive behavior")
+                    else:
+                        # Determine following order and the cause and the effect accordingly
+                        # if there is no serious traffic violation
+                        cf = critical_frames[0]
+                        x_i, y_i = self.fragment_data[cf][p_id]['x'], self.fragment_data[cf][p_id]['y']
+                        vx_i, vy_i = self.fragment_data[cf][p_id]['vx'], self.fragment_data[cf][p_id]['vy']
+                        h_i = self.fragment_data[cf][p_id]['heading_rad']
 
-                        conflict = check_conflict(p_cd, t_cd, p_ct, t_ct)
-                        if conflict != 'parallel':
-                            edge_attr.append(conflict)
+                        x_j, y_j = self.fragment_data[cf][t_id]['x'], self.fragment_data[cf][t_id]['y']
+                        vx_j, vy_j = self.fragment_data[cf][t_id]['vx'], self.fragment_data[cf][t_id]['vy']
+                        h_j = self.fragment_data[cf][t_id]['heading_rad']
+                        # If p_id follows t_id and one is following the other ...
+                        if conflict in head2tail_types:
+                            if is_following(x_i, y_i, x_j, y_j, vx_i, vy_i, vx_j, vy_j, h_i, h_j):
+                                # then the parent node (the cause) should be the agent in the front (the leader)
+                                parent_id, child_id = t_id, p_id
+                            else:
+                                parent_id, child_id = p_id, t_id
+                            # else if t_id and t_id are head2head ...
+                            # elif conflict in head2head_types and is_head_on(x_i, y_i, x_j, y_j, vx_i, vy_i, vx_j, vy_j, h_i, h_j):
 
                 # pruning: remove unclassified fake correlations
                 if len(edge_attr) > 0:
-                    if parent_id not in self.cg.keys():
-                        self.cg[parent_id] = []
-                        self.cg[parent_id].append((child_id, edge_attr)) 
-                    else:
-                        has_edge = False
-                        for c, _ in self.cg[parent_id]:
-                            if child_id == c:
+                    has_edge = False
+                    for p, e in self.cg.items():
+                        for c, _ in e:
+                            if (parent_id == p and child_id == c) or (parent_id ==c and child_id == p):
                                 has_edge = True
-                                break
-                        if not has_edge:
+                    
+                    if not has_edge:
+                        if parent_id not in self.cg.keys():
+                            self.cg[parent_id] = []
+                            self.cg[parent_id].append((child_id, edge_attr)) 
+                        else:
                             self.cg[parent_id].append((child_id, edge_attr))
 
     def simplify_cg(self, ego_id):

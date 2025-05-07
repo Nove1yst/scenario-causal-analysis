@@ -1,4 +1,5 @@
 import re
+import numpy as np
 
 def are_velocities_parallel(vx_i, vy_i, vx_j, vy_j):
     '''
@@ -33,6 +34,45 @@ def is_opposite(dir1, dir2):
         return True
     else:
         return False
+
+def is_following(x_i, y_i, x_j, y_j, vx_i, vy_i, vx_j, vy_j, h_i, h_j):
+    delta_x = x_j - x_i
+    delta_y = y_j - y_i
+
+    rel_vx = vx_j - vx_i
+    rel_vy = vy_j - vy_i
+
+    if abs(h_i - h_j) > 2 * np.pi / 4.:
+        return False
+
+    distance = np.sqrt(delta_x**2 + delta_y**2)
+    target_direction = (delta_x / distance, delta_y / distance)
+    
+    # rel_velocity_magnitude = np.sqrt(rel_vx**2 + rel_vy**2)    
+    # rel_velocity_unit = (rel_vx / rel_velocity_magnitude, rel_vy / rel_velocity_magnitude)
+    
+    return (vx_i * target_direction[0] + vy_i * target_direction[1]) > 0 and (vx_j * target_direction[0] + vy_j * target_direction[1]) > 0
+
+def is_head_on(x_i, y_i, x_j, y_j, vx_i, vy_i, vx_j, vy_j, h_i, h_j):
+    delta_x = x_j - x_i
+    delta_y = y_j - y_i
+
+    rel_vx = vx_j - vx_i
+    rel_vy = vy_j - vy_i
+
+    # If the heading angle is less than 90 degrees, 
+    # then they are not head2head.
+    if abs(h_i - h_j) < 2 * np.pi / 4.:
+        return False
+
+    distance = np.sqrt(delta_x**2 + delta_y**2)
+    target_direction = (delta_x / distance, delta_y / distance)
+    
+    # rel_velocity_magnitude = np.sqrt(rel_vx**2 + rel_vy**2)    
+    # rel_velocity_unit = (rel_vx / rel_velocity_magnitude, rel_vy / rel_velocity_magnitude)
+    
+    return (vx_i * target_direction[0] + vy_i * target_direction[1]) * (vx_j * target_direction[0] + vy_j * target_direction[1]) < 0
+
     
 def is_uturn(move_str):
     cd = extract_direction(move_str)
@@ -111,7 +151,6 @@ def check_conflict(str1, str2, ct1, ct2):
     cd2_end_lane = cd2_end.get('lane', None) if cd2_end else None
     
     if cd1_start is None or cd1_end is None or cd2_start is None or cd2_end is None:
-        # TODO: define unusual behavior here
         return 'unusual behavior'
     
     # TODO: determine other situations

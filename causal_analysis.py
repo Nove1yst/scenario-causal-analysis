@@ -29,15 +29,15 @@ if __name__ == "__main__":
     causal_analyzer = CausalAnalyzer(args.data_dir, args.output_dir)
     causal_analyzer.load_data()
     if args.debug:
-        fragment_id = fragment_id_list[2]
-        ego_id = ego_id_dict[fragment_id][2]
+        fragment_id = '8_10_2 R19'
+        ego_id = 178
         causal_analyzer.set_fragment_id(fragment_id)
         causal_analyzer.detect_risk(ego_id, 
                                     visualize_acc=False, 
                                     visualize_ssm=True, 
                                     visualize_cg=True, 
                                     depth=0, max_depth=2)
-        causal_analyzer.load_risk_events(fragment_id, ego_id)
+        # causal_analyzer.load_risk_events(fragment_id, ego_id)
         causal_analyzer.extract_cg()
         causal_analyzer.simplify_cg(ego_id)
         causal_analyzer.visualize_cg(ego_id)
@@ -45,12 +45,12 @@ if __name__ == "__main__":
         for fragment_id in fragment_id_list:
             for ego_id in ego_id_dict[fragment_id]:
                 causal_analyzer.set_fragment_id(fragment_id)
-                causal_analyzer.detect_risk(ego_id, 
-                                            depth=0, max_depth=args.depth,
-                                            visualize_acc=False,
-                                            visualize_cg=True,
-                                            visualize_ssm=True)
-                # causal_analyzer.load_risk_events(fragment_id, ego_id)
+                # causal_analyzer.detect_risk(ego_id, 
+                #                             depth=0, max_depth=args.depth,
+                #                             visualize_acc=False,
+                #                             visualize_cg=True,
+                #                             visualize_ssm=True)
+                causal_analyzer.load_risk_events(fragment_id, ego_id)
                 causal_analyzer.extract_cg()
                 causal_analyzer.simplify_cg(ego_id)
                 causal_analyzer.visualize_cg(ego_id)
