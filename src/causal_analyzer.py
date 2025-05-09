@@ -5,6 +5,7 @@
 import os
 import sys
 import pickle
+import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -99,7 +100,7 @@ class CausalAnalyzer:
                 anomaly_frames_id = sorted(list(anomaly_frames_id))
                 start_frame = np.max([start_frame, np.min(anomaly_frames_id) - 30])
                 end_frame = np.min([end_frame, np.max(anomaly_frames_id)+1])
-            else: # Should not come here
+            else: # Should not be reached
                 anomaly_frames_id = range(start_frame, end_frame+1)
         else:
             track = self.track_change[fragment_id].get(ego_id, None)
@@ -1188,4 +1189,81 @@ class CausalAnalyzer:
             self.fragment_id = fragment_id
         except Exception as e:
             print(f"Error loading risk events: {e}")
+        
+    def save_cg(self, ego_id: str) -> str:
+        """
+        将因果图保存为JSON文件
+        
+        Args:
+            ego_id: 自车ID
+            
+        Returns:
+            str: 保存的文件路径
+        """
+        if not self.cg:
+            # raise ValueError("因果图不存在，请先提取因果图")
+            print("The causal graph is empty.")
+            return None
+            
+        save_path = os.path.join(self.output_dir, f"{self.fragment_id}_{ego_id}")
+        os.makedirs(save_path, exist_ok=True)
+        
+        # 将因果图转换为可序列化的格式
+        serializable_cg = {}
+        for parent_id, edges in self.cg.items():
+            serializable_cg[str(parent_id)] = []
+            for child_id, edge_attr in edges:
+                serializable_cg[str(parent_id)].append({
+                    'child_id': str(child_id),
+                    'edge_attributes': edge_attr
+                })
+        
+        # 保存为JSON文件
+        json_file = os.path.join(save_path, f"cg_{self.fragment_id}_{ego_id}.json")
+        with open(json_file, 'w', encoding='utf-8') as f:
+            json.dump(serializable_cg, f, ensure_ascii=False, indent=4)
+            
+        print(f"因果图已保存到: {json_file}")
+        return json_file
+        
+    def load_cg(self, fragment_id: str, ego_id: str) -> bool:
+        """
+        从JSON文件加载因果图
+        
+        Args:
+            fragment_id: 片段ID
+            ego_id: 自车ID
+            
+        Returns:
+            bool: 是否成功加载数据
+        """
+        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+        json_file = os.path.join(save_path, f"cg_{fragment_id}_{ego_id}.json")
+        
+        if not os.path.exists(json_file):
+            print(f"因果图文件未找到: {json_file}")
+            return False
+            
+        try:
+            with open(json_file, 'r', encoding='utf-8') as f:
+                serializable_cg = json.load(f)
+                
+            # 将JSON数据转换回原始格式
+            self.cg = {}
+            for parent_id, edges in serializable_cg.items():
+                self.cg[parent_id] = []
+                for edge in edges:
+                    self.cg[parent_id].append((
+                        edge['child_id'],
+                        edge['edge_attributes']
+                    ))
+                    
+            self.fragment_id = fragment_id
+            self.ego_id = ego_id
+            print(f"成功加载因果图: {json_file}")
+            return True
+            
+        except Exception as e:
+            print(f"加载因果图时出错: {e}")
+            return False
         

@@ -1,0 +1,31 @@
+head2tail_types:
+  - following
+  - diverging
+  - converging
+  - crossing conflict: same cross type
+
+head2head_types:
+  - left turn and straight cross conflict: same side
+  - left turn and straight cross conflict: opposite side
+  - right turn and straight cross conflict: start side
+  - right turn and straight cross conflict: end side
+  - left turn and right turn conflict: start side
+  - left turn and right turn conflict: end side
+
+unusual_behavior:
+- unusual cross type
+- unusual behavior
+- U-turn conflict
+
+signal_violation:
+- Red light running
+- Yellow light running
+- No violation of traffic light
+
+retrograde:
+- front_retrograde
+- rear_retrograde
+- full_retrograde
+
+pedestrian:
+- invasive behavior

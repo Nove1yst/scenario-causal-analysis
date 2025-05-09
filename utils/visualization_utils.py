@@ -146,56 +146,26 @@ def create_gif_from_scenario(track_info, frame_info, track_id, scene_id, out_pat
         images[0].save(gif_output_path, save_all=True, append_images=images[1:], duration=100, loop=0)
         # print(f"Saved GIF: {gif_output_path},with {len_img} png ")
 
-# def plot_a_frame( frame_id, frame_info, scene_id,):
-#     # 定义颜色映射，用于不同类型的车辆
-#     color_map = {
-#         'mv': 'blue',
-#         'nmv': 'blue',
-#         'ped': 'blue',
-#         'track_1': 'red',  # 主车为红色
-#         'track_2': 'green',  # 第二辆车为绿色
-#         'track_3': 'yellow',  # 第六辆车为黄色
-#         'track_4': 'purple',  # 第八辆车为紫色
-#         'track_5': 'orange',  # 第九辆车为橙色
-#         'track_6': 'red',  #
-#     }
-
 def plot_vehicle_positions(track_id, track_info, frame_info, scene_id, frame_id, start_frame, end_frame):
     # 定义颜色映射，用于不同类型的车辆
     color_map = {
-        'mv': 'blue',
-        'nmv': 'blue',
-        'ped': 'blue',
-        'track_1': 'red',         # 主车为红色
-        'track_2': 'green',        # 第二辆车为绿色
-        'track_3': 'yellow',       # 第六辆车为黄色
-        'track_4': 'purple',       # 第八辆车为紫色
-        'track_5': 'orange',       # 第九辆车为橙色
-        'track_6': 'red',       #
+        'mv': 'blue', 
+        'nmv': 'blue', 
+        'ped': 'blue', 
+        'track_1': 'red', 
+        'track_2': 'green', 
+        'track_3': 'yellow', 
+        'track_4': 'purple', 
+        'track_5': 'orange', 
+        'track_6': 'red'
     }
 
-    # 创建一个新的图形和坐标轴
     fig, ax = plt.subplots()
     # 绘制网格
     ax.grid(True, which='both', linestyle='--', linewidth=0.5)
 
     # 添加道路绘制逻辑
     plot_roads(ax)
-
-    # rm.draw_map(ax)
-
-    # for track in track_info.items():
-    #     if track['draw_frame_id_start'] <= frame_id <= track['draw_frame_id_end']:
-    #         x = np.array(track_info['track_info']['x'])
-    #         y = np.array(track_info['track_info']['y'])
-    #         ax.scatter(x[track_info['anomalies'][:len(x)]], y[track_info['anomalies'][:len(y)]], color='k',
-    #                    label='Anomalies', zorder=3, s=3)
-    #
-    #         ax.scatter(x[0], y[0], color="green", marker='o', label='Start')
-    #         ax.scatter(x[-1], y[-1], color="red", marker='x', label='End')
-    #         n = track['num']
-    #
-    #         ax.scatter(x, y,color=color_map[f'track_{n}'], label='Trajectory', zorder=2, s=0.3)
 
     motor_vehicles = {'car', 'bus', 'truck'}
     non_motor_vehicles = {'bicycle', 'tricycle', 'motorcycle'}

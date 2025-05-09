@@ -48,17 +48,15 @@ class RetrogradeType(Enum):
 
 class Agent:
     """Base class for all traffic participants"""
-    def __init__(self, agent_id, fragment_id, agent_info):
+    def __init__(self, agent_id, agent_info):
         """
         Initialize an agent
 
         Args:
             agent_id: Unique identifier for the agent
-            fragment_id: ID of the scenario fragment
             agent_type: Type of the agent
         """
         self.id = agent_id
-        self.fragment_id = fragment_id
         self.agent_type = agent_info[0]
         self.agent_class = agent_info[1]
         

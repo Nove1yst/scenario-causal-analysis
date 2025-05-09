@@ -41,6 +41,8 @@ if __name__ == "__main__":
         causal_analyzer.extract_cg()
         causal_analyzer.simplify_cg(ego_id)
         causal_analyzer.visualize_cg(ego_id)
+        causal_analyzer.save_cg(ego_id)
+        causal_analyzer.load_cg(fragment_id, ego_id)
     else:
         for fragment_id in fragment_id_list:
             for ego_id in ego_id_dict[fragment_id]:
@@ -54,3 +56,5 @@ if __name__ == "__main__":
                 causal_analyzer.extract_cg()
                 causal_analyzer.simplify_cg(ego_id)
                 causal_analyzer.visualize_cg(ego_id)
+                causal_analyzer.save_cg(ego_id)
+                # causal_analyzer.load_cg(fragment_id, ego_id)
