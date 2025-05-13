@@ -38,23 +38,17 @@ if __name__ == "__main__":
                                     visualize_cg=True, 
                                     depth=0, max_depth=2)
         # causal_analyzer.load_risk_events(fragment_id, ego_id)
-        causal_analyzer.extract_cg()
-        causal_analyzer.simplify_cg(ego_id)
-        causal_analyzer.visualize_cg(ego_id)
-        causal_analyzer.save_cg(ego_id)
+        causal_analyzer.extract_and_simplify(ego_id, visualize=True, save=True)
         causal_analyzer.load_cg(fragment_id, ego_id)
     else:
         for fragment_id in fragment_id_list:
             for ego_id in ego_id_dict[fragment_id]:
                 causal_analyzer.set_fragment_id(fragment_id)
-                # causal_analyzer.detect_risk(ego_id, 
-                #                             depth=0, max_depth=args.depth,
-                #                             visualize_acc=False,
-                #                             visualize_cg=True,
-                #                             visualize_ssm=True)
-                causal_analyzer.load_risk_events(fragment_id, ego_id)
-                causal_analyzer.extract_cg()
-                causal_analyzer.simplify_cg(ego_id)
-                causal_analyzer.visualize_cg(ego_id)
-                causal_analyzer.save_cg(ego_id)
+                causal_analyzer.detect_risk(ego_id, 
+                                            depth=0, max_depth=args.depth,
+                                            visualize_acc=False,
+                                            visualize_cg=True,
+                                            visualize_ssm=True)
+                # causal_analyzer.load_risk_events(fragment_id, ego_id)
+                causal_analyzer.extract_and_simplify(ego_id, visualize=True, save=True)
                 # causal_analyzer.load_cg(fragment_id, ego_id)

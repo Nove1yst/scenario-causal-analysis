@@ -18,9 +18,9 @@ unusual_behavior:
 - U-turn conflict
 
 signal_violation:
-- Red light running
-- Yellow light running
-- No violation of traffic light
+- red-light running
+- yellow-light running
+- No violation of traffic lights
 
 retrograde:
 - front_retrograde

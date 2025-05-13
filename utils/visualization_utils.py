@@ -135,7 +135,6 @@ def create_gif_from_scenario(track_info, frame_info, track_id, scene_id, out_pat
         plt.savefig(image_path)
         plt.close()
         
-        # 将图片添加到GIF列表
         images.append(Image.open(image_path))
         i += 1
 
@@ -144,7 +143,7 @@ def create_gif_from_scenario(track_info, frame_info, track_id, scene_id, out_pat
         gif_output_path = os.path.join(gif_path, f"ID_{track_id}({gif_number})_frames_{frame_nums}.gif")
 
         images[0].save(gif_output_path, save_all=True, append_images=images[1:], duration=100, loop=0)
-        # print(f"Saved GIF: {gif_output_path},with {len_img} png ")
+        print(f"Saved GIF to {gif_output_path}")
 
 def plot_vehicle_positions(track_id, track_info, frame_info, scene_id, frame_id, start_frame, end_frame):
     # 定义颜色映射，用于不同类型的车辆

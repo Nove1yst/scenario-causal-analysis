@@ -84,6 +84,26 @@ def is_uturn(move_str):
     else:
         return False
 
+def reverse_cardinal_direction(cd):
+    """
+    将车辆行驶方向标识中下划线前后的部分对调 
+    
+    参数:
+        direction (str): 车辆行驶方向标识，如 "w1_n3"
+        
+    返回:
+        str: 对调后的标识，如 "n3_w1"
+    """
+    if '_' not in cd or 'NaN' in cd:
+        raise ValueError("Invalid direction format. Expected splitting with _ and containing no 'NaN'.")
+    
+    parts = cd.split('_')
+    
+    if len(parts) != 2:
+        raise ValueError("Invalid direction format. Expected format like 'w1_n3'")
+    
+    return f"{parts[1]}_{parts[0]}"
+
 def extract_direction(move_str):
     pattern = r'(?P<start_direction>[wesn]|NaN)(?P<start_lane>\d+)?_(?P<end_direction>[wesn]|NaN)(?P<end_lane>\d+)?'
     match = re.match(pattern, move_str)
@@ -153,7 +173,6 @@ def check_conflict(str1, str2, ct1, ct2):
     if cd1_start is None or cd1_end is None or cd2_start is None or cd2_end is None:
         return 'unusual behavior'
     
-    # TODO: determine other situations
     if ct1 == ct2:
         if cd1_start_direction == cd2_start_direction:
             if cd1_start_lane == cd2_start_lane and cd1_end_lane == cd2_end_lane:
@@ -162,7 +181,7 @@ def check_conflict(str1, str2, ct1, ct2):
                 return 'diverging'
             elif cd1_end_lane == cd2_end_lane:
                 return 'converging'
-            elif (cd1_start_lane - cd2_start_lane) * (cd1_end_lane - cd2_end_lane) > 0:
+            elif (cd1_start_lane - cd2_start_lane) * (cd1_end_lane - cd2_end_lane) < 0:
                 return 'crossing conflict: same cross type'
             else:
                 return 'parallel'
@@ -177,7 +196,7 @@ def check_conflict(str1, str2, ct1, ct2):
         if cd1_start_direction == cd2_start_direction:
             if cd1_start_lane == cd2_start_lane:
                 return 'diverging'
-            elif (ct1 == 'LeftTurn' and cd1_start_lane < cd2_start_lane) or (ct2 == 'LeftTurn' and cd1_start_lane > cd2_start_lane):
+            elif (ct1 == 'LeftTurn' and cd1_start_lane > cd2_start_lane) or (ct2 == 'LeftTurn' and cd1_start_lane < cd2_start_lane):
                 return 'left turn and straight cross conflict: same side'
             else:
                 return 'parallel'
@@ -192,7 +211,7 @@ def check_conflict(str1, str2, ct1, ct2):
         if cd1_start_direction == cd2_start_direction:
             if cd1_start_lane == cd2_start_lane:
                 return 'diverging'
-            elif (ct1 == 'RightTurn' and cd1_start_lane > cd2_start_lane) or (ct2 == 'RightTurn' and cd1_start_lane < cd2_start_lane):
+            elif (ct1 == 'RightTurn' and cd1_start_lane < cd2_start_lane) or (ct2 == 'RightTurn' and cd1_start_lane > cd2_start_lane):
                 return 'right turn and straight cross conflict: start side'
             else:
                 return 'parallel'
@@ -213,7 +232,7 @@ def check_conflict(str1, str2, ct1, ct2):
 
     else: # Right turn and left turn
         if cd1_start_direction == cd2_start_direction:
-            if (ct1 == 'RightTurn' and cd1_start_lane > cd2_start_lane) or (ct2 == 'RightTurn' and cd1_start_lane < cd2_start_lane):
+            if (ct1 == 'RightTurn' and cd1_start_lane < cd2_start_lane) or (ct2 == 'RightTurn' and cd1_start_lane > cd2_start_lane):
                 return 'left turn and right turn conflict: start side'
             else:
                 return 'parallel'
@@ -272,7 +291,6 @@ def check_conflict(str1, str2, ct1, ct2):
     #             return 'straight and right turn conflict'
     
     # # 起点终点方向都不同的情况
-    # # TODO: consider situations with vibrations
     # elif is_opposite(cd1_start_direction, cd2_start_direction) and is_opposite(cd1_end_direction, cd2_end_direction):
     #     # parallel, but in opposite direction
     #     return 'opposite parallel'

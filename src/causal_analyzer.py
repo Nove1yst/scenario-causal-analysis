@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
-from src.utils import check_conflict, is_uturn, in_intersection, is_following, is_head_on
+from src.utils import check_conflict, is_uturn, in_intersection, is_following
 from src.agent import Agent
 
 LATJ_THRESHOLD = 0.5 * 9.81  # 横向加加速度风险阈值
@@ -24,7 +24,8 @@ LON_ACC_THRESHOLD = 3.0      # 纵向加速度阈值
 TTC_CRITICAL_THRESHOLD = 3.0   # TTC critical threshold
 TADV_CRITICAL_THRESHOLD = 3.0   # TADV critical threshold
 ACT_CRITICAL_THRESHOLD = 3.0    # ACT critical threshold
-DISTANCE_CRITICAL_THRESHOLD = 1.5  # Distance critical threshold
+DISTANCE_CRITICAL_THRESHOLD = 3.0  # Distance critical threshold
+DISTANCE_CRITICAL_THRESHOLD_ACT = 5.0
 
 TTC_NORMAL_THRESHOLD = 10.0
 TADV_NORMAL_THRESHOLD = 10.0
@@ -41,6 +42,7 @@ critical_thresholds = {
 }
 
 safety_metrics_list = ['tadv', 'act', 'distance']
+# ACT和距离一起判断
 
 head2tail_types = ['following', 'diverging', 'converging', 'crossing conflict: same cross type']
 head2head_types = ['left turn and straight cross conflict: same side', 
@@ -127,10 +129,6 @@ class CausalAnalyzer:
         if df is None:
             return None
         num_timesteps = len(df)
-        
-        # TODO: detect the type of anomaly
-        # for anomaly_frame in anomalies_frames:
-        #     df_anomaly = df[anomaly_frame]
 
         distance_values = {}
         tadv_values = {}
@@ -226,6 +224,27 @@ class CausalAnalyzer:
         retrograde_type = track.get('retrograde_type', None)
         cardinal_direction = track.get('cardinal direction', None)
         return (agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction)
+
+    def get_agent_info_dict(self, tp_id):
+        track = self.tp_info[self.fragment_id].get(tp_id, None)
+        if track is None:
+            return {}
+        agent_type = track['Type']
+        agent_class = track['Class']
+        cross_type = track['CrossType']
+        signal_violation = track['Signal_Violation_Behavior']
+        retrograde_type = track.get('retrograde_type', None)
+        cardinal_direction = track.get('cardinal direction', None)
+        
+        return {
+            "id": tp_id,
+            "agent_type": agent_type,
+            "agent_class": agent_class,
+            "cross_type": cross_type,
+            "signal_violation": signal_violation,
+            "retrograde_type": retrograde_type,
+            "cardinal_direction": cardinal_direction
+        }
 
     def visualize_ssm(self, safety_metrics):
         """
@@ -649,7 +668,7 @@ class CausalAnalyzer:
         # 将当前节点标记为已访问
         visited_nodes.add(ego_id)
         ego_info = self.get_agent_info(ego_id)
-        ego = Agent(ego_id, self.fragment_id, ego_info)
+        # ego = Agent(ego_id, self.fragment_id, ego_info)
         
         if visualize_acc and depth == 0:
             self.visualize_acceleration_analysis(ego_id)
@@ -675,10 +694,7 @@ class CausalAnalyzer:
         for ssm in safety_metrics_list:
             for tp_id, ssm_values in ssm_dataframe[ssm+"_values"].items():
                 # Determine if the SSM values are critical
-                if ssm in ["ttc", "psd", "tadv", "ttc2d", "act", "distance"]:  # Lower is critical
-                    is_critical = [value < critical_thresholds[ssm] for value in ssm_values]
-                else:  # Higher is critical for "drac"
-                    is_critical = [value > critical_thresholds[ssm] for value in ssm_values]
+                is_critical = [value < critical_thresholds[ssm] for value in ssm_values]
                 
                 # Get the indices of critical frames
                 critical_frames_indices = [i for i, critical in enumerate(is_critical) if critical]
@@ -723,12 +739,16 @@ class CausalAnalyzer:
                                     tp_speed = np.hypot(vx_j, vy_j)
                                     tp_accel = np.hypot(ax_j, ay_j)
 
-                                    agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = self.get_agent_info(tp_id)
+                                    agent_type, agent_class, _, signal_violation, retrograde_type, _ = self.get_agent_info(tp_id)
 
                                     # Only detect moving agents, unless the agent is a pedestrian.
                                     # Filter with regard to speed and acceleration.
-                                    if (ego_speed > 1.0 and (tp_speed > 1.0 or agent_type == 'ped')) or (ego_accel > 0.001 and tp_accel > 0.001):
-                                        relevant_critical_frames.append(cf)
+                                    if (ego_speed > 1.0 and (tp_speed > 1.0 or agent_type == 'ped' or agent_type == 'nmv')) or (ego_accel > 0.001 and tp_accel > 0.001):
+                                        # Filter ACT values with regard to distance.
+                                        if ssm == 'act' and ssm_dataframe["distance_values"][tp_id][distance_idx] < DISTANCE_CRITICAL_THRESHOLD_ACT:
+                                            relevant_critical_frames.append(cf)
+                                        else:
+                                            relevant_critical_frames.append(cf)
                                         break
                     
                     # 检查是否存在连续10帧
@@ -854,7 +874,6 @@ class CausalAnalyzer:
                 if p_ct and t_ct and p_ct != 'Others' and t_ct != 'Others':
                     conflict = check_conflict(p_cd, t_cd, p_ct, t_ct)
                     # if conflict != 'parallel':
-                    # TODO: revise the lane conflict detection logic
                     # For now, do not check
                     edge_attr.append(conflict)
                 if p_ct:
@@ -930,6 +949,8 @@ class CausalAnalyzer:
                             # elif conflict in head2head_types and is_head_on(x_i, y_i, x_j, y_j, vx_i, vy_i, vx_j, vy_j, h_i, h_j):
 
                 # pruning: remove unclassified fake correlations
+                parent = Agent.from_dict(self.get_agent_info_dict(parent_id))
+                child = Agent.from_dict(self.get_agent_info_dict(child_id))
                 if len(edge_attr) > 0:
                     has_edge = False
                     for p, e in self.cg.items():
@@ -1057,6 +1078,14 @@ class CausalAnalyzer:
             
         # 限制深度，只保留2层以内的节点
         self.cg = limit_depth(ego_id, connected_component)
+
+    def extract_and_simplify(self, ego_id, visualize=False, save=True):
+        self.extract_cg()
+        self.simplify_cg(ego_id)
+        if visualize:
+            self.visualize_cg(ego_id)
+        if save:
+            self.save_cg(ego_id)
 
     def visualize_cg(self, ego_id, save_pic=True, save_pdf=False):
         """
@@ -1226,7 +1255,7 @@ class CausalAnalyzer:
         print(f"因果图已保存到: {json_file}")
         return json_file
         
-    def load_cg(self, fragment_id: str, ego_id: str) -> bool:
+    def load_cg(self, fragment_id: str, ego_id: int) -> bool:
         """
         从JSON文件加载因果图
         
@@ -1251,10 +1280,11 @@ class CausalAnalyzer:
             # 将JSON数据转换回原始格式
             self.cg = {}
             for parent_id, edges in serializable_cg.items():
+                parent_id = int(parent_id) if parent_id.isdigit() else parent_id
                 self.cg[parent_id] = []
                 for edge in edges:
                     self.cg[parent_id].append((
-                        edge['child_id'],
+                        int(edge['child_id']) if edge['child_id'].isdigit() else edge['child_id'],
                         edge['edge_attributes']
                     ))
                     
@@ -1267,3 +1297,4 @@ class CausalAnalyzer:
             print(f"加载因果图时出错: {e}")
             return False
         
+    

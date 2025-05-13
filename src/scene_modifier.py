@@ -9,7 +9,9 @@ import json
 import random
 from typing import Dict, List, Tuple, Set
 import matplotlib.pyplot as plt
-from utils.visualization_utils import plot_vehicle_positions, plot_roads, create_gif_from_scenario
+from utils.visualization_utils import create_gif_from_scenario
+from utils import reverse_cardinal_direction
+from src.agent import Agent
 
 class SceneModifier:
     def __init__(self, data_dir: str, output_dir: str = None, conflict_type_config: str = None):
@@ -136,7 +138,49 @@ class SceneModifier:
         except Exception as e:
             print(f"加载因果图时出错: {e}")
             return False
+        
+    def generate_agent(self, agent_id: int, edge: list) -> Agent:
+        agent_info = {'id': agent_id}
+        agent_info['agent_type'] = 'mv'
+        agent_info['agent_class'] = 'car'
+        # TODO
+        agent_info['signal_violation'] = 'No violation of traffic lights'
 
+        for (child_id, edge_attr_list) in edge:
+            for edge_attr in edge_attr_list:
+                # Without signal lights data, we cannot generate scenes with signal violations (unless with extra assumptions)
+                # if edge_attr in self.conflict_types['signal_violation']:
+                #     agent_info['signal_violation'] = edge_attr
+                if edge_attr in self.conflict_types['retrograde']:
+                    agent_info['retrograde_type'] = edge_attr
+                
+                if not agent_info:
+                    # Determine cross_type
+                    if edge_attr in self.conflict_types['head2tail_types']:
+                        child_info = self.get_agent_info(child_id)
+                        if edge_attr == 'following':
+                            agent_info['cross_type'] = child_info[2]
+                            agent_info['cardinal_direction'] = child_info[5]
+                        # TODO: determine the cardinal direction and cross type under diverging and converging conditions
+                        # For now, cross_type remains the same as child node.
+                        elif edge_attr == 'diverging':
+                            agent_info['cross_type'] = child_info[2]
+                            agent_info['cardinal_direction'] = 'NaN_NaN'
+                        elif edge_attr == 'converging':
+                            pass
+                        else:
+                            agent_info['cross_type'] = child_info[2]
+                            agent_info['cardinal_direction'] = "NaN_NaN"
+
+                else:
+                    # This is an easy implementation
+                    agent_info['cross_type'] = child_info[2]
+                    agent_info['cardinal_direction'] = reverse_cardinal_direction(child_info[5])
+                    agent_info['agent_type'] = 'nmv'
+                    agent_info['agent_type'] = 'mv'
+
+        return Agent.from_dict(agent_info)
+                        
     def generate_conflict(self):
         if not self.conflict_types:
             print("Please load conflict types first.")
@@ -150,6 +194,9 @@ class SceneModifier:
                 edge_attributes.append(conflict[k])
 
         return edge_attributes
+
+    def generate_track(self, agent: Agent, edges: list):
+        pass
             
     # def get_all_nodes(self) -> Set[str]:
     #     """
@@ -190,7 +237,7 @@ class SceneModifier:
 
     def get_all_nodes(self) -> Set[str]:
         """
-        获取因果图(cg)中的所有节点
+        获取因果图中的所有节点
         
         Returns:
             Set[str]: 所有节点的集合
@@ -205,44 +252,44 @@ class SceneModifier:
                 nodes.add(child_id)
         return nodes
         
-    def add_random_node_and_edge(self) -> Tuple[str, str, str, List[int]]:
-        """
-        随机添加一个新节点和一条指向现有节点的边
+    # def add_random_node_and_edge(self) -> Tuple[str, str, str, List[int]]:
+    #     """
+    #     随机添加一个新节点和一条指向现有节点的边
         
-        Returns:
-            Tuple[str, str, str, List[int]]: (新节点ID, 目标节点ID, 安全指标类型, 关键帧列表)
-        """
-        if not self.risk_events:
-            raise ValueError("请先加载风险事件数据")
+    #     Returns:
+    #         Tuple[str, str, str, List[int]]: (新节点ID, 目标节点ID, 安全指标类型, 关键帧列表)
+    #     """
+    #     if not self.risk_events:
+    #         raise ValueError("请先加载风险事件数据")
             
-        # 获取所有现有节点
-        existing_nodes = self.get_all_nodes()
-        if not existing_nodes:
-            raise ValueError("因果图中没有现有节点")
+    #     # 获取所有现有节点
+    #     existing_nodes = self.get_all_nodes()
+    #     if not existing_nodes:
+    #         raise ValueError("因果图中没有现有节点")
             
-        while True:
-            new_node_id = random.randint(1000, 9999)
-            if new_node_id not in existing_nodes:
-                break
+    #     while True:
+    #         new_node_id = random.randint(1000, 9999)
+    #         if new_node_id not in existing_nodes:
+    #             break
                 
-        # 随机选择一个现有节点作为目标
-        target_node = random.choice(list(existing_nodes))
+    #     # 随机选择一个现有节点作为目标
+    #     target_node = random.choice(list(existing_nodes))
         
-        # 随机选择一个安全指标类型
-        ssm_types = ['tadv', 'ttc2d', 'act', 'distance']
-        ssm_type = random.choice(ssm_types)
+    #     # 随机选择一个安全指标类型
+    #     ssm_types = ['tadv', 'ttc2d', 'act', 'distance']
+    #     ssm_type = random.choice(ssm_types)
         
-        # 生成随机的关键帧列表（模拟10-20帧的连续关键帧）
-        start_frame = random.randint(1, 100)
-        num_frames = random.randint(10, 20)
-        critical_frames = list(range(start_frame, start_frame + num_frames))
+    #     # 生成随机的关键帧列表（模拟10-20帧的连续关键帧）
+    #     start_frame = random.randint(1, 100)
+    #     num_frames = random.randint(10, 20)
+    #     critical_frames = list(range(start_frame, start_frame + num_frames))
         
-        # 添加新节点和边
-        if new_node_id not in self.risk_events:
-            self.risk_events[new_node_id] = []
-        self.risk_events[new_node_id].append((target_node, ssm_type, critical_frames))
+    #     # 添加新节点和边
+    #     if new_node_id not in self.risk_events:
+    #         self.risk_events[new_node_id] = []
+    #     self.risk_events[new_node_id].append((target_node, ssm_type, critical_frames))
         
-        return new_node_id, target_node, ssm_type, critical_frames
+    #     return new_node_id, target_node, ssm_type, critical_frames
         
     def save_modified_risk_events(self) -> str:
         """
@@ -329,46 +376,45 @@ class SceneModifier:
 
         if frame_id is None:
             frame_id = min(self.track_change[self.fragment_id][self.ego_id]['track_info']['frame_id'])
-            
-        frame_data = self.frame_data_processed[self.fragment_id][frame_id]
-        
-        # 过滤出因果图中的节点对应的代理数据
-        filtered_frame_data = []
-        for agent_id, agent_data in frame_data.items():
-            if str(agent_id) in causal_nodes:
-                filtered_frame_data.append({
-                    'tp_id': agent_id,
-                    'vehicle_info': agent_data
-                })
-        
-        fig, ax = plt.subplots(figsize=(12, 8))
-        plot_roads(ax)
-        plot_vehicle_positions(
-            track_id=self.ego_id,
-            track_info=track,
-            frame_info=filtered_frame_data,
-            scene_id=self.fragment_id,
-            frame_id=frame_id,
-            start_frame=frame_id,
-            end_frame=frame_id
-        )
 
-        # create_gif_from_scenario(
-        #     track,
-        #     filtered_frame_data,
-        #     self.ego_id,
-        #     self.fragment_id,
-        #     os.path.join(self.output_dir, "simplified_scenario"),
-        #     0
+        first_frame = frame_id
+        last_frame = min(max(self.track_change[self.fragment_id][self.ego_id]['track_info']['frame_id']), first_frame+100)
+        
+        # fig, ax = plt.subplots(figsize=(12, 8))
+        # plot_roads(ax)
+        # plot_vehicle_positions(
+        #     track_id=self.ego_id,
+        #     track_info=track,
+        #     frame_info=filtered_frame_data,
+        #     scene_id=self.fragment_id,
+        #     frame_id=frame_id,
+        #     start_frame=frame_id,
+        #     end_frame=frame_id
         # )
+
+        frame_data_to_plot = []
+        for frame in range(first_frame, last_frame+1):
+            frame_data = self.frame_data_processed[self.fragment_id][frame]
+
+            filtered_frame_data = []
+            for agent_id, agent_data in frame_data.items():
+                if agent_id in causal_nodes:
+                    filtered_frame_data.append({
+                        'tp_id': agent_id,
+                        'vehicle_info': agent_data
+                    })
+            frame_data_to_plot.append(filtered_frame_data)
+            
+        create_gif_from_scenario(
+            track,
+            frame_data_to_plot,
+            self.ego_id,
+            self.fragment_id,
+            os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}", "simplified_scenario"),
+            0
+        )
         
-        plt.title(f'Simplified scene (Fragment ID: {self.fragment_id}, Frame ID: {frame_id})')
-        save_path = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}")
-        os.makedirs(save_path, exist_ok=True)
-        plt.savefig(os.path.join(save_path, f"causal_agents_{self.fragment_id}_{frame_id}.png"))
-        plt.close()
-        
-        print(f"已保存因果图中的代理可视化结果到: {save_path}")
+        # print(f"已保存因果图中的代理可视化结果到: {save_path}")
 
     def visualize_cg(self, save_pic=True, save_pdf=False):
         """

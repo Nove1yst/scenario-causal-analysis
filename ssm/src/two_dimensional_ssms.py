@@ -57,7 +57,6 @@ def TAdv(samples, toreturn='dataframe'):
                 angle_ij = angle(v_i[0], v_i[1], v_j[0], v_j[1]) # [-pi, pi]
                 parallel_lines = np.isnan(ist[0])|(abs(angle_ij)<(np.pi/60))|(abs(angle_ij)>(np.pi*59/60))
                 # time_advantage[parallel_lines] = ttc[parallel_lines]
-                # TODO: determine the true condition
                 # time_advantage[parallel_lines] = np.inf
                 # for unparallel cases, if the intersection point is not ahead of both vehicles, set time advantage to infinity
                 ist_ahead_i = ((ist[0]-point_i[0])*v_i[0]+(ist[1]-point_i[1])*v_i[1]) >= 0

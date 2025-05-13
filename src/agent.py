@@ -1,70 +1,67 @@
 """
-Agent classes for traffic participants
+Agent class for traffic participants
 """
-import numpy as np
-from enum import Enum
-
-class AgentType(Enum):
-    """Agent type enumeration"""
-    UNKNOWN = "unknown"
-    PEDESTRIAN = "ped"
-    MOTOR_VEHICLE = "mv"
-    NON_MOTOR_VEHICLE = "nmv"
-
-class MotorVehicleClass(Enum):
-    CAR = "car"
-    BUS = "bus"
-    TRUCK = "truck"
-
-class NonMotorVehicleClass(Enum):
-    BICYCLE = "bicycle"
-    TRICYCLE = "tricycle"
-    MOTORCYCLE = "motorcycle"
-
-class PedestrianClass(Enum):
-    PEDESTRIAN = "pedestrian"
-
-# TODO: determine the cross types
-class CrossType(Enum):
-    """Crossing behavior type enumeration"""
-    NORMAL = "Normal"
-    AGGRESSIVE = "Aggressive crossing"
-    VIOLATION = "Violation crossing"
-    ZIGZAG = "Zigzag crossing"
-
-class SignalViolation(Enum):
-    """Signal violation type enumeration"""
-    NONE = "No violation of traffic lights"
-    RED_LIGHT = "Red light running"
-    STOP_SIGN = "Stop sign violation"
-
-class RetrogradeType(Enum):
-    """Retrograde behavior type enumeration"""
-    NORMAL = "normal"
-    FRONT = "front_retrograde"
-    REAR = "rear_retrograde"
-    FULL = "full_retrograde"
-    UNKNOWN = "unknown"
 
 class Agent:
     """Base class for all traffic participants"""
-    def __init__(self, agent_id, agent_info):
+    def __init__(self, agent_id):
         """
         Initialize an agent
 
         Args:
             agent_id: Unique identifier for the agent
-            agent_type: Type of the agent
         """
         self.id = agent_id
+        self.agent_type = None
+        self.agent_class = None
+        
+        # Behavior information
+        self.cross_type = None
+        self.signal_violation = None
+        self.retrograde_type = None
+        self.cardinal_direction = None
+
+    @classmethod
+    def from_dict(cls, agent_dict):
+        """
+        Create an Agent instance from a dictionary
+
+        Args:
+            agent_dict: Dictionary containing agent information
+
+        Returns:
+            An instance of Agent initialized with the provided data
+        """
+        agent = cls(agent_dict["id"])
+        agent.agent_type = agent_dict.get("agent_type")
+        agent.agent_class = agent_dict.get("agent_class")
+        agent.cross_type = agent_dict.get("cross_type")
+        agent.signal_violation = agent_dict.get("signal_violation")
+        agent.retrograde_type = agent_dict.get("retrograde_type")
+        agent.cardinal_direction = agent_dict.get("cardinal_direction")
+        return agent
+
+    def set(self, agent_info):
         self.agent_type = agent_info[0]
         self.agent_class = agent_info[1]
         
         # Behavior information
         self.cross_type = agent_info[2]
-        self.signal_violations = agent_info[3]
+        self.signal_violation = agent_info[3]
         self.retrograde_type = agent_info[4]
         self.cardinal_direction = agent_info[5]
+
+    def to_dict(self):
+        """Convert agent object to dictionary for JSON serialization"""
+        return {
+            "id": self.id,
+            "agent_type": self.agent_type,
+            "agent_class": self.agent_class,
+            "cross_type": self.cross_type,
+            "signal_violation": self.signal_violation,
+            "retrograde_type": self.retrograde_type,
+            "cardinal_direction": self.cardinal_direction
+        }
         
         # Trajectory data
         # self.frames = []
@@ -145,26 +142,3 @@ class Agent:
     #         'accelerations': self.accelerations[start_idx:end_idx],
     #         'headings': self.headings[start_idx:end_idx]
     #     }
-
-# class Pedestrian(Agent):
-#     """Class for pedestrian agents"""
-#     def __init__(self, agent_id, fragment_id):
-#         super().__init__(agent_id, fragment_id, AgentType.PEDESTRIAN)
-        
-        
-#     # def add_crossing_behavior(self, speed, waiting_time):
-#     #     """Add crossing behavior information"""
-#     #     self.crossing_speed.append(speed)
-#     #     self.waiting_time.append(waiting_time)
-
-# class MotorVehicle(Agent):
-#     """Class for motor vehicle agents"""
-#     def __init__(self, agent_id, fragment_id):
-#         super().__init__(agent_id, fragment_id, AgentType.MOTOR_VEHICLE)
-#         self.vehicle_class = None  # e.g., car, bus, truck
-
-
-# class NonMotorVehicle(Agent):
-#     """Class for non-motor vehicle agents (e.g., bicycles)"""
-#     def __init__(self, agent_id, fragment_id):
-#         super().__init__(agent_id, fragment_id, AgentType.NON_MOTOR_VEHICLE)
