@@ -1,6 +1,6 @@
 from matplotlib import pyplot as plt
 import os
-import pickle
+import cv2
 import math
 import matplotlib.pyplot as plt
 from matplotlib import patches
@@ -79,7 +79,7 @@ def create_mp4_from_scenario(track_info, frame_info, track_id, scene_id, out_pat
     start_frame = frame_info[0][0]['vehicle_info']['frame_id']
     end_frame = frame_info[-1][0]['vehicle_info']['frame_id']
 
-    for num in tqdm(frame_info, desc=f"Processing track",leave=True):
+    for num in tqdm(frame_info, desc=f"Processing track", leave=True):
 
         frame_id = num[0]['vehicle_info']['frame_id']
 
@@ -108,7 +108,7 @@ def create_mp4_from_scenario(track_info, frame_info, track_id, scene_id, out_pat
     if video_writer is not None:
         video_writer.release()
 
-    # print(f"Saved video: {video_output_path}, with {frame_nums} frames")
+    print(f"Saved video: {video_output_path}, with {frame_nums} frames")
 
 
 def create_gif_from_scenario(track_info, frame_info, track_id, scene_id, out_path_scene_id,gif_number):
@@ -234,12 +234,9 @@ def draw_track(tp_id, track_info, ax, color_map, n):
 def draw_vehicle(ax, vehicle, color, label):
     # 获取车辆的中心坐标
     x, y = vehicle['x'], vehicle['y']
-    # 获取车辆的代理类型，默认为 'vehicle'
     agent_type = vehicle.get('agent_type', 'vehicle')
 
-    # 获取车辆的速度分量
     vx, vy = vehicle.get('vx', 0), vehicle.get('vy', 0)
-    # 获取车辆的朝向角度（弧度）
     heading_rad = vehicle.get('heading_rad', 0)
 
     # 如果车辆在移动（速度不为0），绘制箭头表示行进方向
@@ -255,7 +252,7 @@ def draw_vehicle(ax, vehicle, color, label):
 
     # 根据车辆类型绘制不同的图形
     if agent_type == 'pedestrian':
-        radius = vehicle.get('radius', 0.5)  # 行人的默认半径
+        radius = vehicle.get('radius', 0.5)
         # 绘制圆形表示行人
         circle = plt.Circle((x, y), radius, color=color, fill=True, alpha=0.5)
         ax.add_patch(circle)

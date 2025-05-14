@@ -270,3 +270,36 @@ def D2C_ij(samples):
     leaving = np.nansum(np.array(leaving_mat),axis=0)
     return dtc, leaving
 
+
+def dist_point_to_line(point, line_params):
+    '''
+    计算点到直线的距离，不考虑线段的端点限制。
+    
+    参数:
+    - point: 点的坐标，形式为 [x, y]
+    - line_params: 直线方程参数，形式为 [a, b, c]，对应于 ax + by + c = 0
+    
+    返回:
+    - 点到直线的距离
+    '''
+    a, b, c = line_params
+    return np.absolute(a*point[0] + b*point[1] + c) / np.sqrt(a**2 + b**2)
+
+
+def dist_point_to_line_from_points(point, line_point1, line_point2):
+    '''
+    通过直线上的两个点和待检查的点，计算点到直线的距离，不考虑线段的端点限制。
+    
+    参数:
+    - point: 待检查点的坐标，形式为 [x, y]
+    - line_point1: 直线上的第一个点，形式为 [x, y]
+    - line_point2: 直线上的第二个点，形式为 [x, y]
+    
+    返回:
+    - 点到直线的距离
+    '''
+    # 通过两点获取直线方程 ax + by + c = 0
+    a, b, c = line(line_point1, line_point2)
+    # 计算点到直线的距离
+    return dist_point_to_line(point, [a, b, c])
+

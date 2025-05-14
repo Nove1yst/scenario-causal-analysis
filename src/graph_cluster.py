@@ -106,10 +106,26 @@ def convert_cg_to_grakel(cg, fragment_id):
                     cross_type_code = 3
                 elif 'U-Turn' in str(cross_type):
                     cross_type_code = 4
-            
-            G.add_node(node, type=type_code, CrossType=cross_type_code)
+
+            sv_code = 0
+            if signal_violation:
+                if 'yellow' in signal_violation:
+                    sv_code = 1
+                elif 'red' in signal_violation:
+                    sv_code = 2
+
+            rt_code = 0
+            if retrograde_type:
+                if 'front' in retrograde_type:
+                    rt_code = 1
+                elif 'rear' in retrograde_type:
+                    rt_code = 2
+                elif 'full' in retrograde_type:
+                    rt_code = 3
+        
+            G.add_node(node, type=type_code, cross_type=cross_type_code, signal_violation=sv_code, retrograde_type=rt_code)
         else:
-            G.add_node(node, type=0, CrossType=0)
+            G.add_node(node, type=0, cross_type=0, signal_violation=0, retrograde_type=0)
     
     # 添加边及其属性
     for parent_id, edges in cg.items():
@@ -145,17 +161,14 @@ def convert_cg_to_grakel(cg, fragment_id):
             # 添加边及其属性
             G.add_edge(parent_id, child_id, conflict_type=conflict_type, is_reverse=is_reverse, is_signal_violation=is_signal_violation)
     
-    # 创建节点标签字典
     node_labels = {}
     for node, attrs in G.nodes(data=True):
-        node_labels[node] = (attrs.get('type', 0), attrs.get('CrossType', 0))
+        node_labels[node] = (attrs.get('type', 0), attrs.get('cross_type', 0), attrs.get('signal_violation', 0), attrs.get('retrograde_type', 0))
     
-    # 创建边标签字典
     edge_labels = {}
     for u, v, attrs in G.edges(data=True):
-        edge_labels[(u, v)] = (attrs.get('conflict_type', 0), int(attrs.get('is_reverse', False)))
+        edge_labels[(u, v)] = (attrs.get('conflict_type', 0), int(attrs.get('is_reverse', False)), int(attrs.get('is_signal_violation', False)))
     
-    # 创建GraKeL图
     grakel_graph = Graph(G.edges(), 
                             node_labels=node_labels,
                             edge_labels=edge_labels)
@@ -430,7 +443,7 @@ def visualize_graph_clusters(kernel_matrix, labels, ids=None, save_path=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str, default="./data/tj")
-    parser.add_argument("--save_dir", type=str, default="output/tj/causal_analysis/debug")
+    parser.add_argument("--save_dir", type=str, default="output/tj/dep2_long")
     args = parser.parse_args()
 
     data_dir = args.data_dir

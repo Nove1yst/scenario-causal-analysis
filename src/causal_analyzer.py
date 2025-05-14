@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
-from src.utils import check_conflict, is_uturn, in_intersection, is_following
+from my_utils import check_conflict, is_uturn, in_intersection, is_following
 from src.agent import Agent
 
 LATJ_THRESHOLD = 0.5 * 9.81  # 横向加加速度风险阈值
@@ -32,7 +32,8 @@ TADV_NORMAL_THRESHOLD = 10.0
 ACT_NORMAL_THRESHOLD = 10.0
 DISTANCE_NORMAL_THRESHOLD = 10.0
 
-WIN_LEN = 30
+WIN_LEN = 50
+RISK_LEN = 8
 
 critical_thresholds = {
     "tadv": TADV_CRITICAL_THRESHOLD,
@@ -51,6 +52,7 @@ head2head_types = ['left turn and straight cross conflict: same side',
                    'right turn and straight cross conflict: end side', 
                    'left turn and right turn conflict: start side', 
                    'left turn and right turn conflict: end side']
+minor_conflict_types = ['following', 'diverging', 'parallel']
 
 class CausalAnalyzer:
     def __init__(self, data_dir, output_dir=None, fragment_id=None):
@@ -100,8 +102,8 @@ class CausalAnalyzer:
                 for anomaly_frame in anomaly_frames_child:
                     anomaly_frames_id.update(range(max((start_frame, anomaly_frame-10)), min(end_frame, anomaly_frame+1)))
                 anomaly_frames_id = sorted(list(anomaly_frames_id))
-                start_frame = np.max([start_frame, np.min(anomaly_frames_id) - 30])
-                end_frame = np.min([end_frame, np.max(anomaly_frames_id)+1])
+                start_frame = np.max([start_frame, np.min(anomaly_frames_id) - WIN_LEN])
+                end_frame = np.min([end_frame, np.max(anomaly_frames_id)+10])
             else: # Should not be reached
                 anomaly_frames_id = range(start_frame, end_frame+1)
         else:
@@ -109,8 +111,8 @@ class CausalAnalyzer:
             start_frame = self.tp_info[fragment_id][ego_id]['State']['frame_id'].iloc[0]
             end_frame = self.tp_info[fragment_id][ego_id]['State']['frame_id'].iloc[-1]
             anomaly_frames_id = track['track_info']['frame_id'][np.where(track['anomalies'] == True)[0]]
-            start_frame = np.max([start_frame, np.min(anomaly_frames_id) - 30])
-            end_frame = np.min([end_frame, np.max(anomaly_frames_id)+1])
+            start_frame = np.max([start_frame, np.min(anomaly_frames_id) - WIN_LEN])
+            end_frame = np.min([end_frame, np.max(anomaly_frames_id)+10])
 
         return self.frame_data_processed[fragment_id][start_frame: end_frame+1], anomaly_frames_id, start_frame, end_frame
     
@@ -743,7 +745,7 @@ class CausalAnalyzer:
 
                                     # Only detect moving agents, unless the agent is a pedestrian.
                                     # Filter with regard to speed and acceleration.
-                                    if (ego_speed > 1.0 and (tp_speed > 1.0 or agent_type == 'ped' or agent_type == 'nmv')) or (ego_accel > 0.001 and tp_accel > 0.001):
+                                    if (ego_speed > 1.0 or ego_accel > 1.0) and ((tp_speed > 1.0 or tp_accel > 1.0) or agent_type == 'ped' or agent_type == 'nmv'):
                                         # Filter ACT values with regard to distance.
                                         if ssm == 'act' and ssm_dataframe["distance_values"][tp_id][distance_idx] < DISTANCE_CRITICAL_THRESHOLD_ACT:
                                             relevant_critical_frames.append(cf)
@@ -758,12 +760,12 @@ class CausalAnalyzer:
                         if i == 0 or relevant_critical_frames[i] == relevant_critical_frames[i-1] + 1:
                             temp_frames.append(relevant_critical_frames[i])
                         else:
-                            if len(temp_frames) >= 10:
+                            if len(temp_frames) >= RISK_LEN:
                                 continuous_frames.extend(temp_frames)
                             temp_frames = [relevant_critical_frames[i]]
                     
                     # 检查最后一组
-                    if len(temp_frames) >= 10:
+                    if len(temp_frames) >= RISK_LEN:
                         continuous_frames.extend(temp_frames)
                         
                     if continuous_frames:
@@ -873,9 +875,8 @@ class CausalAnalyzer:
 
                 if p_ct and t_ct and p_ct != 'Others' and t_ct != 'Others':
                     conflict = check_conflict(p_cd, t_cd, p_ct, t_ct)
-                    # if conflict != 'parallel':
-                    # For now, do not check
-                    edge_attr.append(conflict)
+                    if conflict not in minor_conflict_types:
+                        edge_attr.append(conflict)
                 if p_ct:
                     if p_ct == 'Others' and is_uturn(p_cd):
                         p_ct = 'U-Turn'   
@@ -896,15 +897,21 @@ class CausalAnalyzer:
                 if t_sv:
                     for sv in t_sv:
                         if sv != "No violation of traffic lights":
-                            parent_id, child_id = t_id, p_id
                             edge_attr.append(f"{parent_id}: {sv}")
                             sv_flag = True
+                            if sv == 'red-light running':
+                                parent_id, child_id = t_id, p_id
+                            elif sv == 'yellow-light running' and 'red-light running' not in edge_attr:
+                                parent_id, child_id = t_id, p_id
                 if p_sv:
                     for sv in p_sv: 
                         if sv != "No violation of traffic lights":
-                            parent_id, child_id = p_id, t_id
                             edge_attr.append(f"{parent_id}: {sv}")
                             sv_flag = True
+                            if sv == 'red-light running':
+                                parent_id, child_id = p_id, t_id
+                            elif sv == 'yellow-light running' and 'red-light running' not in edge_attr:
+                                parent_id, child_id = p_id, t_id
 
                 if p_rt is not None and t_rt is not None:
                     if t_rt != "normal" and t_rt != 'unknown':
@@ -1073,7 +1080,7 @@ class CausalAnalyzer:
         # 如果连通子图为空，说明ego_id不在任何连通子图中
         if not connected_component:
             print(f"Warning: ego_id {ego_id} is not in any connected component of the causal graph.")
-            self.cg = {}
+            self.cg = {ego_id: []}
             return
             
         # 限制深度，只保留2层以内的节点

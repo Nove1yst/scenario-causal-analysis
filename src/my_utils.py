@@ -6,7 +6,7 @@ def are_velocities_parallel(vx_i, vy_i, vx_j, vy_j):
     判断速度是否平行。
     '''
     cross_product = abs(vx_i * vy_j - vy_i * vx_j)
-    epsilon = 1e-6  # 浮点误差容忍度
+    epsilon = 1e-6
     return cross_product < epsilon
 
 def are_vectors_collinear(x_i, y_i, vx_i, vy_i, x_j, y_j, vx_j, vy_j):
