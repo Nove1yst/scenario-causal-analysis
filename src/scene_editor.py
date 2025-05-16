@@ -15,7 +15,7 @@ from utils.visualization_utils import create_gif_from_scenario
 from src.my_utils import reverse_cardinal_direction, infer_cardinal_direction
 from src.agent import Agent
 
-class SceneModifier:
+class SceneEditor:
     def __init__(self, data_dir: str, output_dir: str = None, conflict_type_config: str = None):
         """
         初始化场景修改器

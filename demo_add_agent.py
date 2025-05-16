@@ -8,7 +8,7 @@
 import os
 import sys
 import argparse
-from src.scene_modifier import SceneModifier
+from src.scene_editor import SceneEditor
 from src.agent import Agent
 
 def main():
@@ -24,7 +24,7 @@ def main():
     args = parser.parse_args()
     
     # 创建场景修改器
-    modifier = SceneModifier(args.data_dir, args.output_dir)
+    modifier = SceneEditor(args.data_dir, args.output_dir)
     
     # 加载数据
     print(f"加载片段 {args.fragment_id} 的数据...")

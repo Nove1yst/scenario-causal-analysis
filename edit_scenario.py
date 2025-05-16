@@ -1,4 +1,4 @@
-from src.scene_modifier import SceneModifier
+from src.scene_editor import SceneEditor
 
 fragment_id_list = ['7_28_1 R21', '8_10_1 R18', '8_10_2 R19', '8_11_1 R20']
 ego_id_dict = {
@@ -9,7 +9,7 @@ ego_id_dict = {
 }
 
 if __name__ == "__main__":
-    modifier = SceneModifier(data_dir="./data/tj", output_dir="./output/tj/dep2_long2")
+    modifier = SceneEditor(data_dir="./data/tj", output_dir="./output/tj/dep2_long2")
 
     for fragment_id in fragment_id_list:
         for ego_id in ego_id_dict[fragment_id]:

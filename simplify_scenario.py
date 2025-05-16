@@ -1,4 +1,4 @@
-from src.scene_modifier import SceneModifier
+from src.scene_editor import SceneEditor
 
 fragment_id_list = ['7_28_1 R21', '8_10_1 R18', '8_10_2 R19', '8_11_1 R20']
 ego_id_dict = {
@@ -9,7 +9,7 @@ ego_id_dict = {
 }
 
 if __name__ == "__main__":
-    modifier = SceneModifier(data_dir="./data/tj", output_dir="./output/tj/causal_analysis/debug")
+    modifier = SceneEditor(data_dir="./data/tj", output_dir="./output/tj/causal_analysis/debug")
 
     modifier.load_all(fragment_id='8_11_1 R20', ego_id=37)
     modifier.filter_and_visualize_scenario()
