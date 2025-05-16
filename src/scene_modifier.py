@@ -11,8 +11,8 @@ import math
 import numpy as np
 from typing import Dict, List, Tuple, Set
 import matplotlib.pyplot as plt
-from utils.visualization_utils import create_gif_from_scenario, create_mp4_from_scenario
-from src.my_utils import reverse_cardinal_direction
+from utils.visualization_utils import create_gif_from_scenario
+from src.my_utils import reverse_cardinal_direction, infer_cardinal_direction
 from src.agent import Agent
 
 class SceneModifier:
@@ -36,12 +36,16 @@ class SceneModifier:
         self.frame_data = None
         self.frame_data_processed = None
         self.conflict_types = {}
+        self.typical_tracks = {}
+        self.typical_tracks_frag = "7_28_1 R21"
 
     def load_all(self, fragment_id: str, ego_id: int):
         if not self.frame_data:
             self.load_data()
         if not self.conflict_types:
             self.load_conflict_types()
+        if not self.typical_tracks:
+            self.load_typical_tracks()
         self.load_risk_events(fragment_id, ego_id)
         self.load_cg(fragment_id, ego_id)
 
@@ -60,6 +64,26 @@ class SceneModifier:
     
         except Exception as e:
             print(f"Error reading YAML file: {e}")
+
+    def load_typical_tracks(self):
+        """
+        加载包含交叉类型数据的JSON文件
+        
+        返回:
+            dict: 加载的交叉类型字典
+        """
+        file_path = os.path.join(self.data_dir, "typical_track.json")
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                self.typical_tracks = json.load(f)
+            print(f"成功加载文件: {file_path}")
+        except FileNotFoundError:
+            print(f"错误: 文件 '{file_path}' 不存在")
+        except json.JSONDecodeError:
+            print(f"错误: 文件 '{file_path}' 不是有效的JSON格式")
+        except Exception as e:
+            print(f"加载文件时发生错误: {str(e)}")
         
     def load_data(self):
         """加载原始数据"""
@@ -160,8 +184,8 @@ class SceneModifier:
                 
                 if not agent_info:
                     # Determine cross_type
+                    child_info = self.get_agent_info(child_id)
                     if edge_attr in self.conflict_types['head2tail_types']:
-                        child_info = self.get_agent_info(child_id)
                         if edge_attr == 'following':
                             agent_info['cross_type'] = child_info[2]
                             agent_info['cardinal_direction'] = child_info[5]
@@ -169,20 +193,21 @@ class SceneModifier:
                         # For now, cross_type remains the same as child node.
                         elif edge_attr == 'diverging':
                             agent_info['cross_type'] = child_info[2]
-                            agent_info['cardinal_direction'] = 'NaN_NaN'
+                            [start, end] = child_info[5].split('_')
+                            agent_info['cardinal_direction'] = start + '_NaN'
                         elif edge_attr == 'converging':
-                            pass
+                            return NotImplementedError
                         else:
                             agent_info['cross_type'] = child_info[2]
                             agent_info['cardinal_direction'] = "NaN_NaN"
 
+                    elif edge_attr in self.conflict_types['head2head_types']:
+                        return NotImplementedError
                 else:
                     child_info = self.get_agent_info(child_id)
                     # This is an easy implementation
                     agent_info['cross_type'] = child_info[2]
                     agent_info['cardinal_direction'] = reverse_cardinal_direction(child_info[5])
-                    agent_info['agent_type'] = 'nmv'
-                    agent_info['agent_type'] = 'mv'
 
         return Agent.from_dict(agent_info)
                         
@@ -260,31 +285,7 @@ class SceneModifier:
                 target_node_id = child_id
                 edge_attributes = attrs
                 break
-        
-        # 如果没有目标节点，使用ego作为参考
-        if not target_node_id:
-            target_node_id = self.ego_id
-            
-        # 获取目标节点的轨迹
-        target_frames = self.frame_data_processed[self.fragment_id]
-        reference_tracks = []
-        
-        # 收集目标节点在所有帧中的位置数据
-        for frame_id in range(start_frame, end_frame + 1):
-            if frame_id < len(target_frames) and target_node_id in target_frames[frame_id]:
-                target_data = target_frames[frame_id][target_node_id]
-                reference_tracks.append({
-                    'frame_id': frame_id,
-                    'x': target_data['x'],
-                    'y': target_data['y'],
-                    'vx': target_data['vx'],
-                    'vy': target_data['vy'],
-                    'heading_rad': target_data.get('heading_rad', 0)
-                })
-                
-        if not reference_tracks:
-            raise ValueError(f"无法获取目标节点 {target_node_id} 的轨迹数据")
-            
+
         # 根据冲突类型生成轨迹
         conflict_type = None
         for attr in edge_attributes:
@@ -301,6 +302,64 @@ class SceneModifier:
         # 默认为跟随行为
         if not conflict_type:
             conflict_type = 'following'
+        
+        # 如果没有目标节点，使用ego
+        if not target_node_id:
+            target_node_id = self.ego_id
+            
+        # 获取目标节点的轨迹
+        target_frames = self.frame_data_processed[self.fragment_id]
+        target_track = []
+        
+        # 收集目标节点在所有帧中的位置数据
+        for frame_id in range(start_frame, end_frame + 1):
+            if frame_id < len(target_frames) and target_node_id in target_frames[frame_id]:
+                target_data = target_frames[frame_id][target_node_id]
+                target_track.append({
+                    'frame_id': frame_id,
+                    'x': target_data['x'],
+                    'y': target_data['y'],
+                    'vx': target_data['vx'],
+                    'vy': target_data['vy'],
+                    'heading_rad': target_data.get('heading_rad', 0)
+                })
+                
+        if not target_track:
+            raise ValueError(f"无法获取目标节点 {target_node_id} 的轨迹数据")
+        
+        # get reference track
+        reference_track_id = 0
+        if conflict_type in self.conflict_types['head2tail_types']:
+            cd = agent.cardinal_direction
+            ct = agent.cross_type[0]
+
+            for k in self.typical_tracks.keys():
+                if k in ct.lower():
+                    reference_track_id = self.typical_tracks[k].get(cd, [])
+
+        if reference_track_id:
+            # reference_track_id = random.choice(reference_track_id)
+            reference_track_id = reference_track_id[1]
+
+        reference_track = []
+        
+        frame_shift = 20
+        aligned_frame_id = start_frame - frame_shift
+        ref_start_frame = min(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
+        ref_end_frame = max(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
+        for frame_id in range(ref_start_frame, ref_end_frame+1):
+            reference_data = self.frame_data_processed[self.typical_tracks_frag][frame_id][reference_track_id]
+            reference_track.append({
+                    'frame_id': aligned_frame_id,
+                    'x': reference_data['x'],
+                    'y': reference_data['y'],
+                    'vx': reference_data['vx'],
+                    'vy': reference_data['vy'],
+                    'ax': reference_data['ax'],
+                    'ay': reference_data['ay'],
+                    'heading_rad': reference_data.get('heading_rad', 0)
+                })
+            aligned_frame_id += 1
             
         # 生成轨迹点
         offset_x, offset_y = 0, 0
@@ -308,9 +367,24 @@ class SceneModifier:
         
         # 根据冲突类型调整轨迹生成参数
         if conflict_type == 'following':
-            # 跟随行为：保持在目标车辆后方
-            offset_x, offset_y = -5, 0  # 在目标车辆后方5米
-            scale_vx, scale_vy = 1.0, 1.0
+            # 跟随行为：在时间轴上向前平移（延迟跟随）
+            frame_shift = 30
+            
+            # 创建时间偏移后的轨迹
+            shifted_tracks = []
+            if len(target_track) > frame_shift:
+                shifted_tracks = target_track[:-frame_shift]  # 截取前面的部分，丢弃最后time_shift帧
+                
+                # 调整空间位置（仍然保持在目标车辆后方）
+                offset_x, offset_y = -1.0, 0
+                scale_vx, scale_vy = 1.0, 1.0
+            else:
+                # 如果轨迹太短，无法进行时间平移，退回到原来的方法
+                shifted_tracks = target_track
+                offset_x, offset_y = -5, 0
+                scale_vx, scale_vy = 1.0, 1.0
+                
+            target_track = shifted_tracks
         elif conflict_type == 'diverging':
             # 分叉行为：从相同位置开始，然后分开
             offset_x, offset_y = -2, 2  # 稍微错开起始位置
@@ -329,35 +403,43 @@ class SceneModifier:
             scale_vx, scale_vy = -1.0, -1.0
             
         # 根据参考轨迹和参数生成新轨迹
-        for i, ref in enumerate(reference_tracks):
-            # 加入随机扰动使轨迹更自然
-            noise_x = random.uniform(-0.5, 0.5)
-            noise_y = random.uniform(-0.5, 0.5)
+        for i, ref in enumerate(reference_track):
+            # # 加入随机扰动使轨迹更自然
+            # noise_x = random.uniform(-0.5, 0.5)
+            # noise_y = random.uniform(-0.5, 0.5)
             
-            # 计算新位置
-            new_x = ref['x'] + offset_x + noise_x
-            new_y = ref['y'] + offset_y + noise_y
+            # # 计算新位置
+            # new_x = ref['x'] + offset_x + noise_x
+            # new_y = ref['y'] + offset_y + noise_y
+            new_x = ref['x']
+            new_y = ref['y']
             
             # 计算新速度
             new_vx = ref['vx'] * scale_vx
             new_vy = ref['vy'] * scale_vy
             
-            # 计算新朝向（根据速度方向）
-            if new_vx != 0 or new_vy != 0:
-                new_heading = math.atan2(new_vy, new_vx)
-            else:
-                new_heading = ref['heading_rad']
+            # 对于'following'模式，我们将帧ID向后偏移，表示时间轴上的前移
+            current_frame_id = ref['frame_id']
+            
+            # # 计算新朝向（根据速度方向）
+            # if new_vx != 0 or new_vy != 0:
+            #     new_heading = math.atan2(new_vy, new_vx)
+            # else:
+            #     new_heading = ref['heading_rad']
+            new_heading = ref['heading_rad']
                 
-            # 简单计算加速度（如果有连续帧）
-            if i > 0:
-                prev_vx = track_data['track_info']['vx'][-1]
-                prev_vy = track_data['track_info']['vy'][-1]
-                dt = 0.1  # 假设帧率为10Hz
-                new_ax = (new_vx - prev_vx) / dt
-                new_ay = (new_vy - prev_vy) / dt
-            else:
-                new_ax = 0
-                new_ay = 0
+            # # 简单计算加速度（如果有连续帧）
+            # if i > 0:
+            #     prev_vx = track_data['track_info']['vx'][-1]
+            #     prev_vy = track_data['track_info']['vy'][-1]
+            #     dt = 0.1  # 假设帧率为10Hz
+            #     new_ax = (new_vx - prev_vx) / dt
+            #     new_ay = (new_vy - prev_vy) / dt
+            # else:
+            #     new_ax = 0
+            #     new_ay = 0
+            new_ax = ref['ax']
+            new_ay = ref['ay']
                 
             # 车辆尺寸（根据agent类型设置）
             if agent.agent_class == 'car':
@@ -368,7 +450,7 @@ class SceneModifier:
                 width, length = 1.5, 3.0
                 
             # 添加到轨迹数据中
-            track_data['track_info']['frame_id'].append(ref['frame_id'])
+            track_data['track_info']['frame_id'].append(current_frame_id)
             track_data['track_info']['x'].append(new_x)
             track_data['track_info']['y'].append(new_y)
             track_data['track_info']['vx'].append(new_vx)
@@ -383,14 +465,6 @@ class SceneModifier:
         for key in track_data['track_info']:
             if key != 'frame_id':  # frame_id通常保持为列表
                 track_data['track_info'][key] = np.array(track_data['track_info'][key])
-                
-        # 根据冲突类型设置异常帧
-        anomaly_count = min(20, len(track_data['track_info']['frame_id']) // 4)  # 约25%的帧为异常
-        anomaly_start = len(track_data['track_info']['frame_id']) // 2 - anomaly_count // 2
-        
-        # 设置异常帧
-        track_data['anomalies'] = np.zeros(len(track_data['track_info']['frame_id']), dtype=bool)
-        track_data['anomalies'][anomaly_start:anomaly_start + anomaly_count] = True
         
         return track_data
 
@@ -580,7 +654,7 @@ class SceneModifier:
         output_dir = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}", "modified_scenario")
         os.makedirs(output_dir, exist_ok=True)
         
-        create_mp4_from_scenario(
+        create_gif_from_scenario(
             tracks_dict,
             frame_data_to_plot,
             self.ego_id,
@@ -691,12 +765,12 @@ class SceneModifier:
             dot.render(dot_path, format='pdf', cleanup=True)
             print(f"Causal graph saved to {dot_path}.pdf")
 
-    def add_and_visualize_new_agent(self, new_agent_id: int = None, target_node_id: int = None, edge_attributes: list = None):
+    def add_and_visualize_new_agent(self, new_agent: Agent, target_node_id: int = None, edge_attributes: list = None):
         """
         生成新代理，添加到因果图中，并可视化修改后的场景
         
         Args:
-            new_agent_id: 新代理的ID，如果为None则随机生成
+            new_agent_id: 新代理的ID
             target_node_id: 目标节点ID，如果为None则随机选择
             edge_attributes: 边属性列表，如果为None则随机生成
             
@@ -712,11 +786,11 @@ class SceneModifier:
             raise ValueError("因果图中没有现有节点")
             
         # 生成新代理ID（如果未提供）
-        if new_agent_id is None:
-            while True:
-                new_agent_id = random.randint(1000, 9999)
-                if new_agent_id not in existing_nodes:
-                    break
+        # if not new_agent:
+        #     while True:
+        #         new_agent_id = random.randint(1000, 9999)
+        #         if new_agent_id not in existing_nodes:
+        #             break
                     
         # 选择目标节点（如果未提供）
         if target_node_id is None:
@@ -727,19 +801,22 @@ class SceneModifier:
             edge_attributes = self.generate_conflict()
             
         # 添加节点和边到因果图
-        if not self.add_node_and_edge_to_cg(new_agent_id, target_node_id, edge_attributes):
+        if not self.add_node_and_edge_to_cg(new_agent.id, target_node_id, edge_attributes):
             return None, None
             
-        # 生成代理对象
-        agent = self.generate_agent(new_agent_id, [(target_node_id, edge_attributes)])
+        # # 生成代理对象
+        # if not new_agent:
+        #     agent = self.generate_agent(new_agent_id, [(target_node_id, edge_attributes)])
+        # else:
+        #     agent = new_agent
         
         # 生成轨迹数据
-        track_data = self.generate_track(agent, [(target_node_id, edge_attributes)])
+        track_data = self.generate_track(new_agent, [(target_node_id, edge_attributes)])
         
         # 可视化修改后的场景（包含新代理）
-        self.filter_and_visualize_scenario(new_agents={new_agent_id: track_data})
+        self.filter_and_visualize_scenario(new_agents={new_agent.id: track_data})
         
         # 更新并保存因果图可视化
         self.visualize_cg()
         
-        return new_agent_id, track_data
+        return new_agent.id, track_data

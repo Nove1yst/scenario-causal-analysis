@@ -60,57 +60,6 @@ import networkx as nx
 #         plt.savefig(save_path)
 #     plt.close()
 
-def create_mp4_from_scenario(track_info, frame_info, track_id, scene_id, out_path_scene_id, fps=10):
-    images = []
-    video_path = os.path.join(out_path_scene_id, 'video')
-    os.makedirs(video_path, exist_ok=True)
-
-    i = 0
-    frame_nums = len(frame_info)
-    image_base_path = os.path.join(out_path_scene_id, f'ID_[{track_id}]')
-    os.makedirs(image_base_path, exist_ok=True)
-
-    # Video writer object
-    video_output_path = os.path.join(video_path, f"ID_[{track_id}]_frames_{frame_nums}.mp4")
-
-    # Initialize video writer (mp4 format, codec is 'mp4v')
-    video_writer = None
-
-    start_frame = frame_info[0][0]['vehicle_info']['frame_id']
-    end_frame = frame_info[-1][0]['vehicle_info']['frame_id']
-
-    for num in tqdm(frame_info, desc=f"Processing track", leave=True):
-
-        frame_id = num[0]['vehicle_info']['frame_id']
-
-        # Plot and save individual frames as images
-        plot_vehicle_positions(track_id, track_info, num, scene_id, frame_id, start_frame, end_frame)
-        image_path = os.path.join(image_base_path,
-                                  f"ID_{track_id}_{i}_in_{frame_nums}_frame_id_{frame_id}.png")
-        plt.savefig(image_path)
-        plt.close()
-
-        # Convert saved image to video frame
-        img = Image.open(image_path)
-        img_array = np.array(img)
-
-        # Initialize the video writer once with the correct frame size (based on first frame)
-        if video_writer is None:
-            height, width, _ = img_array.shape
-            video_writer = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
-
-        # Write the frame to the video
-        video_writer.write(cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
-
-        i += 1
-
-    # Release the video writer object
-    if video_writer is not None:
-        video_writer.release()
-
-    print(f"Saved video: {video_output_path}, with {frame_nums} frames")
-
-
 def create_gif_from_scenario(track_info, frame_info, track_id, scene_id, out_path_scene_id,gif_number):
     images = []
     gif_path = os.path.join(out_path_scene_id, 'gif')

@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.getcwd())
 from ssm.src.two_dimensional_ssms import TAdv, TTC2D, ACT
 from ssm.src.geometry_utils import CurrentD
-from my_utils import check_conflict, is_uturn, in_intersection, is_following
+from src.my_utils import check_conflict, is_uturn, in_intersection, is_following
 from src.agent import Agent
 
 LATJ_THRESHOLD = 0.5 * 9.81  # 横向加加速度风险阈值
@@ -52,7 +52,7 @@ head2head_types = ['left turn and straight cross conflict: same side',
                    'right turn and straight cross conflict: end side', 
                    'left turn and right turn conflict: start side', 
                    'left turn and right turn conflict: end side']
-minor_conflict_types = ['following', 'diverging', 'parallel']
+minor_conflict_types = ['parallel']
 
 class CausalAnalyzer:
     def __init__(self, data_dir, output_dir=None, fragment_id=None):

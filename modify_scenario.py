@@ -15,9 +15,4 @@ if __name__ == "__main__":
         for ego_id in ego_id_dict[fragment_id]:
             modifier.load_all(fragment_id=fragment_id, ego_id=ego_id)
             modifier.add_node_and_edge_to_cg(1001, 1)
-            # modifier.visualize_cg()
-
             modifier.filter_and_visualize_scenario()
-
-    # # 或者指定特定帧进行可视化
-    # modifier.filter_and_visualize_scenario(frame_id=100)

@@ -305,6 +305,41 @@ def check_conflict(str1, str2, ct1, ct2):
     # else:
     #     return 'converge and diverge'
 
+def infer_cardinal_direction(ct, start_direction):
+    if 'straight' in ct.lower():
+        if start_direction == 'w':
+            return 'e'
+        elif start_direction == 'e':
+            return 'w'
+        elif start_direction == 'n':
+            return 's'
+        else:
+            return 'n'
+    elif 'right' in ct.lower():
+        if start_direction == 'w':
+            return 's'
+        elif start_direction == 'e':
+            return 'n'
+        elif start_direction == 'n':
+            return 'w'
+        else:
+            return 'e'
+    elif 'left' in ct.lower():
+        if start_direction == 'w':
+            return 'n'
+        elif start_direction == 'e':
+            return 's'
+        elif start_direction == 'n':
+            return 'e'
+        else:
+            return 'w'
+    else:
+        return 'n'
+    
+def get_cross_type(crtp: str, conflict: str) -> str:
+    crtp = crtp.lower()
+    
+
 if __name__ == "__main__":
     move_str1 = "n2_n3"
     # move_str2 = "w2_e5"

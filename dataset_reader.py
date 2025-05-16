@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from matplotlib.animation import FuncAnimation
-from matplotlib.patches import FancyArrowPatch
+
+from src.my_utils import extract_direction
 
 sys.path.append(os.getcwd())
 
-fragment_id_list = ['7_28_1 R21', '8_10_1 R18', '8_10_2 R19', '8_11_1 R20']
+fragment_id_list = ['7_28_1 R21']
 ego_id_dict = {
     '7_28_1 R21': [1, 9, 11, 13, 26, 31, 79, 141, 144, 148, 162, 167, 170, 181],
     '8_10_1 R18': [13, 70, 76, 157],
@@ -29,8 +29,6 @@ ego_id_dict = {
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str, default="./data/tj")
-    parser.add_argument("--output_dir", type=str, default="./output/tj/causal_analysis/debug")
-    parser.add_argument("--depth", type=int, default=2)
     args = parser.parse_args()
 
     with open(os.path.join(args.data_dir, "tp_info_tj.pkl"), "rb") as f:
@@ -50,6 +48,11 @@ if __name__ == "__main__":
         "retrograde_type": set(),
         "cardinal_direction": set()
     }
+    cross_type_dict = {
+        "straight": {},
+        "right": {},
+        "left": {}
+    }
 
     unclassified = set()
 
@@ -67,9 +70,8 @@ if __name__ == "__main__":
             if track_data['Signal_Violation_Behavior'] is not None:
                 for signal_violation_behavior in track_data['Signal_Violation_Behavior']:
                     meta_data_dict['signal_violation_behavior'].add(signal_violation_behavior)
-            if track_data['CrossType'] is not None:
-                # CrossType value is an array. Must be iterated over.
-                # len(CrossType) <= 1          
+
+            if track_data['CrossType'] is not None:     
                 for cross_type in track_data['CrossType']:
                     meta_data_dict['cross_type'].add(cross_type)
                 
@@ -83,15 +85,31 @@ if __name__ == "__main__":
 
                 if 'NaN' in cardinal_direction:
                     unclassified.add((fragment_id, id, cardinal_direction))
-                    
-            # if track_data['CrossType'] not in meta_data_dict['cross_type']:
-            #     meta_data_dict['cross_type'].add(track_data['CrossType'])
-            # if track_data['retrograde_type'] not in meta_data_dict['retrograde_type']:
-            #     meta_data_dict['retrograde_type'].add(track_data['retrograde_type'])
-            # if track_data['cardinal direction'] not in meta_data_dict['cardinal_direction']:
-            #     meta_data_dict['cardinal_direction'].add(track_data['cardinal direction'])
+            else:
+                cardinal_direction = None
+
+            if agent_type == 'mv' and cardinal_direction:
+                if 'straight' in cross_type.lower():
+                    if cardinal_direction in cross_type_dict['straight'].keys():
+                        cross_type_dict['straight'][cardinal_direction].append(id)
+                    else:
+                        cross_type_dict['straight'][cardinal_direction] = [id]
+                elif 'left' in cross_type.lower():
+                    if cardinal_direction in cross_type_dict['left'].keys():
+                        cross_type_dict['left'][cardinal_direction].append(id)
+                    else:
+                        cross_type_dict['left'][cardinal_direction] = [id]
+                elif 'right' in cross_type.lower():
+                    if cardinal_direction in cross_type_dict['right'].keys():
+                        cross_type_dict['right'][cardinal_direction].append(id)
+                    else:
+                        cross_type_dict['right'][cardinal_direction] = [id]
 
     print(meta_data_dict)
     print()
     print(unclassified)
+    
+    with open("typical_track.json", "w", encoding="utf-8") as f:
+        json.dump(cross_type_dict, f, indent=4, ensure_ascii=False)
+    print(cross_type_dict)
         

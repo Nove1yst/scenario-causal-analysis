@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 from src.scene_modifier import SceneModifier
+from src.agent import Agent
 
 def main():
     parser = argparse.ArgumentParser(description='添加新代理到场景并可视化')
@@ -18,7 +19,7 @@ def main():
     parser.add_argument('--ego_id', type=int, default=37, help='自车ID')
     parser.add_argument('--conflict_type', type=str, default=None, choices=['following', 'diverging', 'converging', 'crossing conflict: same cross type'], 
                         help='冲突类型，不指定则随机生成')
-    parser.add_argument('--target_id', type=int, default=None, help='目标节点ID，不指定则随机选择')
+    parser.add_argument('--target_id', type=int, default=37, help='目标节点ID，不指定则随机选择')
     
     args = parser.parse_args()
     
@@ -30,13 +31,22 @@ def main():
     modifier.load_all(args.fragment_id, args.ego_id)
     
     # 准备边属性
-    edge_attributes = None
-    if args.conflict_type:
-        edge_attributes = [args.conflict_type]
+    edge_attributes = ['right turn and straight cross conflict: end side']
+    # if args.conflict_type:
+    #     edge_attributes = [args.conflict_type]
+
+    new_agent = Agent.from_dict({"id": 1001, 
+                                 "agent_type": "mv", 
+                                 "agent_class": "car", 
+                                 "cross_type": ["StraightCross"], 
+                                 "signal_violation": ["No violation of traffic lights"], 
+                                 "retrograde_type": "normal", 
+                                 "cardinal_direction": "n1_s3"})
     
     # 添加新代理并可视化
     print("添加新代理到场景并生成轨迹...")
     new_agent_id, track_data = modifier.add_and_visualize_new_agent(
+        new_agent=new_agent,
         target_node_id=args.target_id,
         edge_attributes=edge_attributes
     )

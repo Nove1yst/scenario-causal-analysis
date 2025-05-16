@@ -283,7 +283,10 @@ def dist_point_to_line(point, line_params):
     - 点到直线的距离
     '''
     a, b, c = line_params
-    return np.absolute(a*point[0] + b*point[1] + c) / np.sqrt(a**2 + b**2)
+    denominator = np.sqrt(a**2 + b**2)
+    if np.abs(denominator) < 1e-10:
+        return np.nan
+    return np.absolute(a*point[0] + b*point[1] + c) / denominator
 
 
 def dist_point_to_line_from_points(point, line_point1, line_point2):
