@@ -31,6 +31,7 @@ class SceneEditor:
 
         self.risk_events = None
         self.cg = None
+        self.agents = None
         self.fragment_id = None
         self.ego_id = None
         self.frame_data = None
@@ -96,34 +97,34 @@ class SceneEditor:
         with open(os.path.join(self.data_dir, "frame_data_tj_processed.pkl"), "rb") as f:
             self.frame_data_processed = pickle.load(f)
         
-    def load_risk_events(self, fragment_id: str, ego_id: int) -> bool:
-        """
-        读取保存的风险数据
+    # def load_risk_events(self, fragment_id: str, ego_id: int) -> bool:
+    #     """
+    #     读取保存的风险数据
         
-        Args:
-            fragment_id: 片段ID
-            ego_id: 自车ID
+    #     Args:
+    #         fragment_id: 片段ID
+    #         ego_id: 自车ID
             
-        Returns:
-            bool: 是否成功加载数据
-        """
-        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
-        risk_events_file = os.path.join(save_path, f"risk_events_data_{fragment_id}_{ego_id}.pkl")
+    #     Returns:
+    #         bool: 是否成功加载数据
+    #     """
+    #     save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+    #     risk_events_file = os.path.join(save_path, f"risk_events_data_{fragment_id}_{ego_id}.pkl")
         
-        if not os.path.exists(risk_events_file):
-            print(f"风险事件文件未找到: {risk_events_file}")
-            return False
+    #     if not os.path.exists(risk_events_file):
+    #         print(f"风险事件文件未找到: {risk_events_file}")
+    #         return False
         
-        try:
-            with open(risk_events_file, "rb") as f:
-                self.risk_events = pickle.load(f)
-            self.fragment_id = fragment_id
-            self.ego_id = ego_id
-            print(f"成功加载风险事件: {risk_events_file}")
-            return True
-        except Exception as e:
-            print(f"加载风险事件时出错: {e}")
-            return False
+    #     try:
+    #         with open(risk_events_file, "rb") as f:
+    #             self.risk_events = pickle.load(f)
+    #         self.fragment_id = fragment_id
+    #         self.ego_id = ego_id
+    #         print(f"成功加载风险事件: {risk_events_file}")
+    #         return True
+    #     except Exception as e:
+    #         print(f"加载风险事件时出错: {e}")
+    #         return False
         
     def load_cg(self, fragment_id: str, ego_id: int) -> bool:
         """
@@ -145,7 +146,9 @@ class SceneEditor:
             
         try:
             with open(json_file, 'r', encoding='utf-8') as f:
-                serializable_cg = json.load(f)
+                data = json.load(f)
+                serializable_cg = data['causal_graph']
+                serializable_agents = data.get('agents', {})
                 
             # 将JSON数据转换回原始格式
             self.cg = {}
@@ -157,6 +160,12 @@ class SceneEditor:
                         int(edge['child_id']) if edge['child_id'].isdigit() else edge['child_id'],
                         edge['edge_attributes']
                     ))
+            
+            # 加载agents字典
+            self.agents = {}
+            for agent_id, agent_dict in serializable_agents.items():
+                agent_id = int(agent_id) if agent_id.isdigit() else agent_id
+                self.agents[agent_id] = Agent.from_dict(agent_dict)
                     
             self.fragment_id = fragment_id
             self.ego_id = ego_id
@@ -343,7 +352,7 @@ class SceneEditor:
 
         reference_track = []
         
-        frame_shift = 20
+        frame_shift = 50
         aligned_frame_id = start_frame - frame_shift
         ref_start_frame = min(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
         ref_end_frame = max(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
@@ -367,9 +376,6 @@ class SceneEditor:
         
         # 根据冲突类型调整轨迹生成参数
         if conflict_type == 'following':
-            # 跟随行为：在时间轴上向前平移（延迟跟随）
-            frame_shift = 30
-            
             # 创建时间偏移后的轨迹
             shifted_tracks = []
             if len(target_track) > frame_shift:
@@ -489,7 +495,7 @@ class SceneEditor:
         return (agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction)
 
     def get_all_nodes(self) -> Set[str]:
-        """
+        """  
         获取因果图中的所有节点
         
         Returns:
@@ -820,3 +826,23 @@ class SceneEditor:
         self.visualize_cg()
         
         return new_agent.id, track_data
+
+    def generate_scenario(self):
+        return NotImplementedError
+        """
+        不依赖原始场景数据，直接根据给定的因果图和典型轨迹库生成场景。
+        轨迹全部从典型轨迹库中获取。
+
+        Args:
+
+        Returns:
+            dict: 所有节点的轨迹数据，key为agent_id，value为track_data
+        """
+        result_tracks = {}
+        for agent_id in self.cg.keys():
+            # 获取cross_type和cardinal_direction
+            agent = self.agents[agent_id]
+            track_data = self.generate_track(agent=agent, edges=['diverging'])
+            result_tracks[agent_id] = track_data
+
+        return result_tracks

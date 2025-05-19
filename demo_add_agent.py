@@ -24,28 +24,28 @@ def main():
     args = parser.parse_args()
     
     # 创建场景修改器
-    modifier = SceneEditor(args.data_dir, args.output_dir)
+    editor = SceneEditor(args.data_dir, args.output_dir)
     
     # 加载数据
     print(f"加载片段 {args.fragment_id} 的数据...")
-    modifier.load_all(args.fragment_id, args.ego_id)
+    editor.load_all(args.fragment_id, args.ego_id)
     
     # 准备边属性
-    edge_attributes = ['right turn and straight cross conflict: end side']
+    edge_attributes = ['left turn and right turn conflict: end side']
     # if args.conflict_type:
     #     edge_attributes = [args.conflict_type]
 
     new_agent = Agent.from_dict({"id": 1001, 
                                  "agent_type": "mv", 
                                  "agent_class": "car", 
-                                 "cross_type": ["StraightCross"], 
+                                 "cross_type": ["LeftTurn"], 
                                  "signal_violation": ["No violation of traffic lights"], 
                                  "retrograde_type": "normal", 
-                                 "cardinal_direction": "n1_s3"})
+                                 "cardinal_direction": "e1_s3"})
     
     # 添加新代理并可视化
     print("添加新代理到场景并生成轨迹...")
-    new_agent_id, track_data = modifier.add_and_visualize_new_agent(
+    new_agent_id, track_data = editor.add_and_visualize_new_agent(
         new_agent=new_agent,
         target_node_id=args.target_id,
         edge_attributes=edge_attributes

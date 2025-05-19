@@ -62,11 +62,17 @@ class CausalAnalyzer:
             output_dir: 输出目录路径
         """
         self.data_dir = data_dir
-        self.output_dir = output_dir if output_dir else os.path.join(data_dir, 'analysis_results')
+        self.output_dir = output_dir if output_dir else os.path.join(data_dir, 'output')
         self.risk_events = None
         os.makedirs(self.output_dir, exist_ok=True)
 
         self.fragment_id = fragment_id if fragment_id is not None else None
+        self.ego_id = None
+        self.frame_data = None
+        self.frame_data_processed = None
+        self.tp_info = None
+        self.cg = None
+        self.agents = {}  # 添加agents字典
         
     def load_data(self):
         with open(os.path.join(self.data_dir, "track_change_tj.pkl"), "rb") as f:
@@ -856,6 +862,7 @@ class CausalAnalyzer:
     
     def extract_cg(self):
         self.cg = {}
+        self.agents = {}  # 重置agents字典
         edges = set()
 
         for p_id, influence in self.risk_events.items():
@@ -865,8 +872,17 @@ class CausalAnalyzer:
 
                 # Assume no causal relationship between pedestrians
                 if p_type == 'ped' and t_type == 'ped':
-                    break
+                    continue
 
+                # 创建Agent对象
+                if p_id not in self.agents:
+                    p_agent = Agent.from_tuple(p_id, self.get_agent_info(p_id))
+                    self.agents[p_id] = p_agent
+
+                if t_id not in self.agents:
+                    t_agent = Agent.from_tuple(t_id, self.get_agent_info(t_id))
+                    self.agents[t_id] = t_agent
+                
                 edge_attr = []
                 parent_id, child_id = p_id, t_id
                 edges.add((parent_id, child_id))
@@ -895,32 +911,32 @@ class CausalAnalyzer:
                         edge_attr.append('unusual cross type')
 
                 if t_sv:
-                    for sv in t_sv:
-                        if sv != "No violation of traffic lights":
-                            edge_attr.append(f"{parent_id}: {sv}")
-                            sv_flag = True
-                            if sv == 'red-light running':
-                                parent_id, child_id = t_id, p_id
-                            elif sv == 'yellow-light running' and 'red-light running' not in edge_attr:
-                                parent_id, child_id = t_id, p_id
+                    t_sv = t_sv[0]
                 if p_sv:
-                    for sv in p_sv: 
-                        if sv != "No violation of traffic lights":
-                            edge_attr.append(f"{parent_id}: {sv}")
-                            sv_flag = True
-                            if sv == 'red-light running':
-                                parent_id, child_id = p_id, t_id
-                            elif sv == 'yellow-light running' and 'red-light running' not in edge_attr:
-                                parent_id, child_id = p_id, t_id
+                    p_sv = p_sv[0]
+                if t_sv and t_sv != "No violation of traffic lights":
+                    edge_attr.append(f"{t_id}: {t_sv}")
+                    sv_flag = True
+                    if t_sv == 'red-light running':
+                        parent_id, child_id = t_id, p_id
+                    elif t_sv == 'yellow-light running' and p_sv != 'red-light running':
+                        parent_id, child_id = t_id, p_id
+                if p_sv and p_sv != "No violation of traffic lights":
+                    edge_attr.append(f"{p_id}: {p_sv}")
+                    sv_flag = True
+                    if p_sv == 'red-light running':
+                        parent_id, child_id = p_id, t_id
+                    elif p_sv == 'yellow-light running' and t_sv != 'red-light running':
+                        parent_id, child_id = p_id, t_id
 
                 if p_rt is not None and t_rt is not None:
                     if t_rt != "normal" and t_rt != 'unknown':
                         parent_id, child_id = t_id, p_id
-                        edge_attr.append(f"{parent_id}: {t_rt}")
+                        edge_attr.append(f"{t_id}: {t_rt}")
                         rt_flag = True
                     if p_rt != "normal" and p_rt != 'unknown':
                         parent_id, child_id = p_id, t_id
-                        edge_attr.append(f"{parent_id}: {p_rt}")
+                        edge_attr.append(f"{p_id}: {p_rt}")
                         rt_flag = True
 
                 # The retrograding agent must be the cause for the conflict.
@@ -929,11 +945,11 @@ class CausalAnalyzer:
                     if p_type == 'ped':
                         if not sv_flag:
                             parent_id, child_id = p_id, t_id
-                            edge_attr.append(f"{parent_id}: invasive behavior")
+                            edge_attr.append(f"{p_id}: intrusion")
                     elif t_type == 'ped':
                         if not sv_flag:
                             parent_id, child_id = t_id, p_id
-                            edge_attr.append(f"{parent_id}: invasive behavior")
+                            edge_attr.append(f"{t_id}: intrusion")
                     else:
                         # Determine following order and the cause and the effect accordingly
                         # if there is no serious traffic violation
@@ -956,8 +972,6 @@ class CausalAnalyzer:
                             # elif conflict in head2head_types and is_head_on(x_i, y_i, x_j, y_j, vx_i, vy_i, vx_j, vy_j, h_i, h_j):
 
                 # pruning: remove unclassified fake correlations
-                parent = Agent.from_dict(self.get_agent_info_dict(parent_id))
-                child = Agent.from_dict(self.get_agent_info_dict(child_id))
                 if len(edge_attr) > 0:
                     has_edge = False
                     for p, e in self.cg.items():
@@ -1237,7 +1251,6 @@ class CausalAnalyzer:
             str: 保存的文件路径
         """
         if not self.cg:
-            # raise ValueError("因果图不存在，请先提取因果图")
             print("The causal graph is empty.")
             return None
             
@@ -1254,10 +1267,18 @@ class CausalAnalyzer:
                     'edge_attributes': edge_attr
                 })
         
+        # 将agents字典转换为可序列化的格式
+        serializable_agents = {}
+        for agent_id, agent in self.agents.items():
+            serializable_agents[str(agent_id)] = agent.to_dict()
+        
         # 保存为JSON文件
         json_file = os.path.join(save_path, f"cg_{self.fragment_id}_{ego_id}.json")
         with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(serializable_cg, f, ensure_ascii=False, indent=4)
+            json.dump({
+                'causal_graph': serializable_cg,
+                'agents': serializable_agents
+            }, f, ensure_ascii=False, indent=4)
             
         print(f"因果图已保存到: {json_file}")
         return json_file
@@ -1282,7 +1303,9 @@ class CausalAnalyzer:
             
         try:
             with open(json_file, 'r', encoding='utf-8') as f:
-                serializable_cg = json.load(f)
+                data = json.load(f)
+                serializable_cg = data['causal_graph']
+                serializable_agents = data.get('agents', {})
                 
             # 将JSON数据转换回原始格式
             self.cg = {}
@@ -1294,6 +1317,12 @@ class CausalAnalyzer:
                         int(edge['child_id']) if edge['child_id'].isdigit() else edge['child_id'],
                         edge['edge_attributes']
                     ))
+            
+            # 加载agents字典
+            self.agents = {}
+            for agent_id, agent_dict in serializable_agents.items():
+                agent_id = int(agent_id) if agent_id.isdigit() else agent_id
+                self.agents[agent_id] = Agent.from_dict(agent_dict)
                     
             self.fragment_id = fragment_id
             self.ego_id = ego_id

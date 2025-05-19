@@ -17,7 +17,7 @@
             "request": "launch",
             "program": "causal_analysis.py",
             "console": "integratedTerminal",
-            "args": "--debug"
+            "args": ["--output_dir", "./output/tj/dep2_long2", "--debug"]
         },
         {
             "name": "Visualization",

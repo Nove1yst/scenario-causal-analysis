@@ -85,43 +85,41 @@ def convert_cg_to_grakel(cg, fragment_id):
         if node_info:
             agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = node_info
             
-            # 将类别信息编码为数值
-            # 将agent_type编码为数值
-            type_code = 0
+            # 将类别信息编码
+            type_code = 'mv'
             if agent_type == 'mv':
-                type_code = 1
+                type_code = 'mv'
             elif agent_type == 'nmv':
-                type_code = 2
+                type_code = 'nmv'
             else:
-                type_code = 0
+                type_code = 'ped'
             
-            # 将cross_type编码为数值
-            cross_type_code = 0
+            cross_type_code = 'other'
             if cross_type:
                 if 'Left' in str(cross_type):
-                    cross_type_code = 1
+                    cross_type_code = 'lft'
                 elif 'Right' in str(cross_type):
-                    cross_type_code = 2
+                    cross_type_code = 'rht'
                 elif 'Straight' in str(cross_type):
-                    cross_type_code = 3
+                    cross_type_code = 'str'
                 elif 'U-Turn' in str(cross_type):
-                    cross_type_code = 4
+                    cross_type_code = 'ut'
 
-            sv_code = 0
+            sv_code = 'nsv'
             if signal_violation:
                 if 'yellow' in signal_violation:
-                    sv_code = 1
+                    sv_code = 'ysv'
                 elif 'red' in signal_violation:
-                    sv_code = 2
+                    sv_code = 'rsv'
 
-            rt_code = 0
+            rt_code = 'nrt'
             if retrograde_type:
                 if 'front' in retrograde_type:
-                    rt_code = 1
+                    rt_code = 'frt'
                 elif 'rear' in retrograde_type:
-                    rt_code = 2
+                    rt_code = 'rrt'
                 elif 'full' in retrograde_type:
-                    rt_code = 3
+                    rt_code = 'flrt'
         
             G.add_node(node, type=type_code, cross_type=cross_type_code, signal_violation=sv_code, retrograde_type=rt_code)
         else:
@@ -449,15 +447,9 @@ if __name__ == '__main__':
     data_dir = args.data_dir
     save_dir = args.save_dir
     track_change, tp_info, frame_data, frame_data_processed = None, None, None, None
-    # with open(os.path.join(data_dir, "track_change_tj.pkl"), "rb") as f:
-    #     track_change = pickle.load(f)
     with open(os.path.join(data_dir, "tp_info_tj.pkl"), "rb") as f:
         tp_info = pickle.load(f)
-    # with open(os.path.join(data_dir, "frame_data_tj.pkl"), "rb") as f:
-    #     frame_data = pickle.load(f)
-    # with open(os.path.join(data_dir, "frame_data_tj_processed.pkl"), "rb") as f:
-    #     frame_data_processed = pickle.load(f)
 
     cgs_dict = load_cgs(save_dir)
 
-    cluster_causal_graphs(cgs_dict, n_clusters=4, cluster_method='spectral', save_path=save_dir)
+    cluster_causal_graphs(cgs_dict, n_clusters=5, cluster_method='spectral', save_path=save_dir)
