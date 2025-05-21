@@ -73,6 +73,7 @@ class CausalAnalyzer:
         self.tp_info = None
         self.cg = None
         self.agents = {}  # 添加agents字典
+        self.generated_tracks = None
         
     def load_data(self):
         with open(os.path.join(self.data_dir, "track_change_tj.pkl"), "rb") as f:
@@ -84,8 +85,37 @@ class CausalAnalyzer:
         with open(os.path.join(self.data_dir, "frame_data_tj_processed.pkl"), "rb") as f:
             self.frame_data_processed = pickle.load(f)
 
-    def set_fragment_id(self, fragment_id):
+    def load_track(self, agent_id: int) -> dict:
+        """
+        加载保存的轨迹数据
+        
+        Args:
+            agent_id: 代理ID
+            
+        Returns:
+            dict: 加载的轨迹数据，如果文件不存在则返回None
+        """
+        if not self.fragment_id:
+            raise ValueError("请先加载数据")
+            
+        file_path = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}", "tracks", f"track_{agent_id}.pkl")
+        
+        if not os.path.exists(file_path):
+            print(f"轨迹数据文件不存在: {file_path}")
+            return None
+            
+        try:
+            with open(file_path, "rb") as f:
+                track_data = pickle.load(f)
+            print(f"成功加载轨迹数据: {file_path}")
+            return track_data
+        except Exception as e:
+            print(f"加载轨迹数据时出错: {e}")
+            return None
+
+    def select_fragment(self, fragment_id, ego_id):
         self.fragment_id = fragment_id
+        self.ego_id = ego_id
         self.fragment_data = self.frame_data_processed[fragment_id]
 
     def prepare_ssm_dataframe(self, ego_id, anomaly_frames_child=None):
@@ -862,8 +892,11 @@ class CausalAnalyzer:
     
     def extract_cg(self):
         self.cg = {}
-        self.agents = {}  # 重置agents字典
+        self.agents = {}
         edges = set()
+
+        ego_agent = Agent.from_dict(self.get_agent_info_dict(self.ego_id))
+        self.agents[self.ego_id] = ego_agent
 
         for p_id, influence in self.risk_events.items():
             for t_id, ssm, critical_frames in influence:

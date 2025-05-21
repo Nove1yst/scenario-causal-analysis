@@ -10,7 +10,6 @@ import random
 import math
 import numpy as np
 from typing import Dict, List, Tuple, Set
-import matplotlib.pyplot as plt
 from utils.visualization_utils import create_gif_from_scenario
 from src.my_utils import reverse_cardinal_direction, infer_cardinal_direction
 from src.agent import Agent
@@ -41,13 +40,13 @@ class SceneEditor:
         self.typical_tracks_frag = "7_28_1 R21"
 
     def load_all(self, fragment_id: str, ego_id: int):
-        if not self.frame_data:
+        if not self.frame_data_processed:
             self.load_data()
         if not self.conflict_types:
             self.load_conflict_types()
         if not self.typical_tracks:
             self.load_typical_tracks()
-        self.load_risk_events(fragment_id, ego_id)
+        # self.load_risk_events(fragment_id, ego_id)
         self.load_cg(fragment_id, ego_id)
 
     def load_conflict_types(self):
@@ -92,8 +91,8 @@ class SceneEditor:
             self.track_change = pickle.load(f)
         with open(os.path.join(self.data_dir, "tp_info_tj.pkl"), "rb") as f:
             self.tp_info = pickle.load(f)
-        with open(os.path.join(self.data_dir, "frame_data_tj.pkl"), "rb") as f:
-            self.frame_data = pickle.load(f)
+        # with open(os.path.join(self.data_dir, "frame_data_tj.pkl"), "rb") as f:
+        #     self.frame_data = pickle.load(f)
         with open(os.path.join(self.data_dir, "frame_data_tj_processed.pkl"), "rb") as f:
             self.frame_data_processed = pickle.load(f)
         
@@ -166,7 +165,7 @@ class SceneEditor:
             for agent_id, agent_dict in serializable_agents.items():
                 agent_id = int(agent_id) if agent_id.isdigit() else agent_id
                 self.agents[agent_id] = Agent.from_dict(agent_dict)
-                    
+            
             self.fragment_id = fragment_id
             self.ego_id = ego_id
             print(f"成功加载因果图: {json_file}")
@@ -234,7 +233,7 @@ class SceneEditor:
 
         return edge_attributes
 
-    def generate_track(self, agent=None, edges: list = None):
+    def generate_track(self, agent=None, edges: list = None, frame_shift: int = None, reference_id: int = 1):
         """
         根据agent信息和边属性生成轨迹数据
         
@@ -259,7 +258,6 @@ class SceneEditor:
         end_frame = max(ego_track['track_info']['frame_id'])
         frame_count = end_frame - start_frame + 1
         
-        # 创建新轨迹数据结构
         track_data = {
             'track_info': {
                 'frame_id': [],
@@ -280,7 +278,7 @@ class SceneEditor:
             'Signal_Violation_Behavior': agent.signal_violation,
             'retrograde_type': agent.retrograde_type,
             'cardinal direction': agent.cardinal_direction,
-            'num': 6  # 默认编号
+            'num': 5
         }
         
         # 根据边属性和冲突类型生成轨迹
@@ -348,11 +346,12 @@ class SceneEditor:
 
         if reference_track_id:
             # reference_track_id = random.choice(reference_track_id)
-            reference_track_id = reference_track_id[1]
+            reference_track_id = reference_track_id[reference_id]
 
         reference_track = []
         
-        frame_shift = 50
+        if not frame_shift:
+            frame_shift = 25
         aligned_frame_id = start_frame - frame_shift
         ref_start_frame = min(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
         ref_end_frame = max(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
@@ -370,80 +369,62 @@ class SceneEditor:
                 })
             aligned_frame_id += 1
             
-        # 生成轨迹点
-        offset_x, offset_y = 0, 0
-        scale_vx, scale_vy = 1.0, 1.0
+        # # 生成轨迹点
+        # offset_x, offset_y = 0, 0
+        # scale_vx, scale_vy = 1.0, 1.0
         
-        # 根据冲突类型调整轨迹生成参数
-        if conflict_type == 'following':
-            # 创建时间偏移后的轨迹
-            shifted_tracks = []
-            if len(target_track) > frame_shift:
-                shifted_tracks = target_track[:-frame_shift]  # 截取前面的部分，丢弃最后time_shift帧
+        # # 根据冲突类型调整轨迹生成参数
+        # if conflict_type == 'following':
+        #     # 创建时间偏移后的轨迹
+        #     shifted_tracks = []
+        #     if len(target_track) > frame_shift:
+        #         shifted_tracks = target_track[:-frame_shift]  # 截取前面的部分，丢弃最后time_shift帧
                 
-                # 调整空间位置（仍然保持在目标车辆后方）
-                offset_x, offset_y = -1.0, 0
-                scale_vx, scale_vy = 1.0, 1.0
-            else:
-                # 如果轨迹太短，无法进行时间平移，退回到原来的方法
-                shifted_tracks = target_track
-                offset_x, offset_y = -5, 0
-                scale_vx, scale_vy = 1.0, 1.0
+        #         # 调整空间位置（仍然保持在目标车辆后方）
+        #         offset_x, offset_y = -1.0, 0
+        #         scale_vx, scale_vy = 1.0, 1.0
+        #     else:
+        #         # 如果轨迹太短，无法进行时间平移，退回到原来的方法
+        #         shifted_tracks = target_track
+        #         offset_x, offset_y = -5, 0
+        #         scale_vx, scale_vy = 1.0, 1.0
                 
-            target_track = shifted_tracks
-        elif conflict_type == 'diverging':
-            # 分叉行为：从相同位置开始，然后分开
-            offset_x, offset_y = -2, 2  # 稍微错开起始位置
-            scale_vx, scale_vy = 1.0, 1.2  # 速度略有不同
-        elif conflict_type == 'converging':
-            # 汇合行为：从不同位置开始，然后靠近
-            offset_x, offset_y = -10, 5  # 开始位置较远
-            scale_vx, scale_vy = 1.2, 0.9  # 调整速度使轨迹汇合
-        elif 'crossing conflict' in conflict_type:
-            # 交叉冲突：轨迹相交
-            offset_x, offset_y = 5, -8
-            scale_vx, scale_vy = 0.9, 1.1
-        elif 'retrograde' in agent.retrograde_type:
-            # 逆行行为：速度方向相反
-            offset_x, offset_y = 10, 0
-            scale_vx, scale_vy = -1.0, -1.0
+        #     target_track = shifted_tracks
+        # elif conflict_type == 'diverging':
+        #     # 分叉行为：从相同位置开始，然后分开
+        #     offset_x, offset_y = -2, 2  # 稍微错开起始位置
+        #     scale_vx, scale_vy = 1.0, 1.2  # 速度略有不同
+        # elif conflict_type == 'converging':
+        #     # 汇合行为：从不同位置开始，然后靠近
+        #     offset_x, offset_y = -10, 5  # 开始位置较远
+        #     scale_vx, scale_vy = 1.2, 0.9  # 调整速度使轨迹汇合
+        # elif 'crossing conflict' in conflict_type:
+        #     # 交叉冲突：轨迹相交
+        #     offset_x, offset_y = 5, -8
+        #     scale_vx, scale_vy = 0.9, 1.1
+        # elif 'retrograde' in agent.retrograde_type:
+        #     # 逆行行为：速度方向相反
+        #     offset_x, offset_y = 10, 0
+        #     scale_vx, scale_vy = -1.0, -1.0
             
         # 根据参考轨迹和参数生成新轨迹
-        for i, ref in enumerate(reference_track):
-            # # 加入随机扰动使轨迹更自然
-            # noise_x = random.uniform(-0.5, 0.5)
-            # noise_y = random.uniform(-0.5, 0.5)
+        for ref in reference_track:
             
             # # 计算新位置
-            # new_x = ref['x'] + offset_x + noise_x
-            # new_y = ref['y'] + offset_y + noise_y
+            # new_x = ref['x'] + offset_x
+            # new_y = ref['y'] + offset_y 
             new_x = ref['x']
             new_y = ref['y']
             
-            # 计算新速度
-            new_vx = ref['vx'] * scale_vx
-            new_vy = ref['vy'] * scale_vy
+            # new_vx = ref['vx'] * scale_vx
+            # new_vy = ref['vy'] * scale_vy
+
+            new_vx = ref['vx']
+            new_vy = ref['vy']
             
-            # 对于'following'模式，我们将帧ID向后偏移，表示时间轴上的前移
             current_frame_id = ref['frame_id']
-            
-            # # 计算新朝向（根据速度方向）
-            # if new_vx != 0 or new_vy != 0:
-            #     new_heading = math.atan2(new_vy, new_vx)
-            # else:
-            #     new_heading = ref['heading_rad']
             new_heading = ref['heading_rad']
                 
-            # # 简单计算加速度（如果有连续帧）
-            # if i > 0:
-            #     prev_vx = track_data['track_info']['vx'][-1]
-            #     prev_vy = track_data['track_info']['vy'][-1]
-            #     dt = 0.1  # 假设帧率为10Hz
-            #     new_ax = (new_vx - prev_vx) / dt
-            #     new_ay = (new_vy - prev_vy) / dt
-            # else:
-            #     new_ax = 0
-            #     new_ay = 0
             new_ax = ref['ax']
             new_ay = ref['ay']
                 
@@ -455,7 +436,6 @@ class SceneEditor:
             else:
                 width, length = 1.5, 3.0
                 
-            # 添加到轨迹数据中
             track_data['track_info']['frame_id'].append(current_frame_id)
             track_data['track_info']['x'].append(new_x)
             track_data['track_info']['y'].append(new_y)
@@ -472,7 +452,63 @@ class SceneEditor:
             if key != 'frame_id':  # frame_id通常保持为列表
                 track_data['track_info'][key] = np.array(track_data['track_info'][key])
         
+        # 保存生成的轨迹数据
+        self.save_track(track_data, agent.id)
+        
         return track_data
+
+    def save_track(self, track_data: dict, agent_id: int) -> str:
+        """
+        保存生成的轨迹数据到文件
+        
+        Args:
+            track_data: 轨迹数据字典
+            agent_id: 代理ID
+            
+        Returns:
+            str: 保存的文件路径
+        """
+        if not self.fragment_id or not self.ego_id:
+            raise ValueError("请先加载数据")
+            
+        save_path = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}", "tracks")
+        os.makedirs(save_path, exist_ok=True)
+        
+        file_path = os.path.join(save_path, f"track_{agent_id}.pkl")
+        
+        with open(file_path, "wb") as f:
+            pickle.dump(track_data, f)
+            
+        print(f"轨迹数据已保存到: {file_path}")
+        return file_path
+
+    def load_track(self, agent_id: int) -> dict:
+        """
+        加载保存的轨迹数据
+        
+        Args:
+            agent_id: 代理ID
+            
+        Returns:
+            dict: 加载的轨迹数据，如果文件不存在则返回None
+        """
+        if not self.fragment_id or not self.ego_id:
+            raise ValueError("请先加载数据")
+            
+        file_path = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}", "tracks", f"track_{agent_id}.pkl")
+        
+        if not os.path.exists(file_path):
+            print(f"轨迹数据文件不存在: {file_path}")
+            return None
+            
+        try:
+            with open(file_path, "rb") as f:
+                track_data = pickle.load(f)
+            print(f"成功加载轨迹数据: {file_path}")
+            return track_data
+        except Exception as e:
+            print(f"加载轨迹数据时出错: {e}")
+            return None
 
     def get_agent_info(self, tp_id):
         """
@@ -589,12 +625,12 @@ class SceneEditor:
         if not self.cg or not self.fragment_id:
             raise ValueError("请先加载因果图数据")
             
-        if not self.frame_data or not self.frame_data_processed:
+        if not self.frame_data_processed:
             self.load_data()
         
         causal_nodes = self.get_all_nodes()
         track = self.track_change[self.fragment_id][self.ego_id]
-        track['num'] = 5
+        track['num'] = 6
 
         if frame_id is None:
             frame_id = min(self.track_change[self.fragment_id][self.ego_id]['track_info']['frame_id'])
@@ -671,15 +707,12 @@ class SceneEditor:
         
         print(f"已保存修改后的场景可视化结果到: {output_dir}")
 
-    def visualize_cg(self, save_pic=True, save_pdf=False):
+    def visualize_graph(self, save_pic=True, save_pdf=False):
         """
         使用Graphviz可视化因果图，避免边标签重合和节点重合问题。
         如果两个节点之间已经存在边，则合并边标签而不是添加新边。
 
         Args:
-            causal_graph: 表示因果图的字典，键为代理ID，值为它们影响的代理ID列表。
-            fragment_id: 片段ID
-            ego_id: 自车ID
             save_pic: 是否保存PNG格式图片
             save_pdf: 是否保存PDF格式图片
         """
@@ -690,7 +723,7 @@ class SceneEditor:
             print("Also need to install system-level Graphviz: https://graphviz.org/download/")
             return
         
-        if self.risk_events is None:
+        if self.cg is None:
             print("Causal graph does not exist. Please extract causal graph before visualization.")
             return
         
@@ -714,18 +747,17 @@ class SceneEditor:
                 all_nodes.add(influenced_agent)
         
         for node in all_nodes:
-            node_info = self.get_agent_info(node)
-            if node_info:
-                agent_type, agent_class, cross_type, signal_violation, retrograde_type, cardinal_direction = node_info
-                node_label = f"{node}\n{agent_class}\n"
+            agent = self.agents.get(node, None)
+            if agent:
+                node_label = f"{node}\n{agent.agent_class}\n"
                 
                 # 添加违规信息（如果有）
-                if cross_type:
-                    for ct in cross_type:
+                if agent.cross_type:
+                    for ct in agent.cross_type:
                         if ct != "Normal":
                             node_label += f"{ct}\n"
-                if cardinal_direction is not None:
-                    node_label += f"{cardinal_direction}\n"
+                if agent.cardinal_direction is not None:
+                    node_label += f"{agent.cardinal_direction}\n"
                 # if signal_violation:
                     # for sv in signal_violation:
                         # if sv != "No violation of traffic lights":
@@ -823,12 +855,11 @@ class SceneEditor:
         self.filter_and_visualize_scenario(new_agents={new_agent.id: track_data})
         
         # 更新并保存因果图可视化
-        self.visualize_cg()
+        self.visualize_graph()
         
         return new_agent.id, track_data
 
-    def generate_scenario(self):
-        return NotImplementedError
+    def generate_scenario(self, new_agents, new_edges, frame_shift_list):
         """
         不依赖原始场景数据，直接根据给定的因果图和典型轨迹库生成场景。
         轨迹全部从典型轨迹库中获取。
@@ -839,10 +870,65 @@ class SceneEditor:
             dict: 所有节点的轨迹数据，key为agent_id，value为track_data
         """
         result_tracks = {}
-        for agent_id in self.cg.keys():
-            # 获取cross_type和cardinal_direction
-            agent = self.agents[agent_id]
-            track_data = self.generate_track(agent=agent, edges=['diverging'])
-            result_tracks[agent_id] = track_data
+        for (new_agent, new_edge, frame_shift) in zip(new_agents, new_edges, frame_shift_list):
+            track_data = self.generate_track(agent=new_agent, edges=new_edge, frame_shift=frame_shift)
+            result_tracks[new_agent.id] = track_data
+
+        self.filter_and_visualize_scenario(new_agents=result_tracks)
 
         return result_tracks
+
+    def merge_graphs(self, cg_file: str) -> dict:
+        """
+        合并两个因果图
+        
+        Args:
+            cg_file: 因果图文件路径
+            
+        Returns:
+            dict: 合并后的因果图
+        """
+        try:
+            with open(cg_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                cg = data['causal_graph']
+                agents = data.get('agents', {})
+        except Exception as e:
+            print(f"读取第二个因果图文件时出错: {e}")
+            return None
+            
+        # 合并因果图
+        merged_cg = self.cg.copy()
+        merged_agents = self.agents.copy()
+                
+        for parent_id, edges in cg.items():
+            parent_id = int(parent_id) if parent_id.isdigit() else parent_id
+            if parent_id not in merged_cg:
+                merged_cg[parent_id] = []
+                
+            for child_id, edge_attr in edges.items():
+                child_id = int(child_id) if child_id.isdigit() else child_id
+                # 检查是否已存在相同的边
+                edge_exists = False
+                for existing_edge in merged_cg[parent_id]:
+                    if existing_edge[0] == child_id:
+                        # 合并边属性
+                        existing_attrs = set(existing_edge[1])
+                        new_attrs = set(edge_attr)
+                        merged_attrs = list(existing_attrs.union(new_attrs))
+                        merged_cg[parent_id].remove(existing_edge)
+                        merged_cg[parent_id].append((child_id, merged_attrs))
+                        edge_exists = True
+                        break
+                        
+                if not edge_exists:
+                    merged_cg[parent_id].append((child_id, edge_attr))
+                    
+        # 合并agents信息
+        for agent_id, agent_info in agents.items():
+            agent_id = int(agent_id) if agent_id.isdigit() else agent_id
+            if agent_id not in merged_agents:
+                merged_agents[agent_id] = Agent.from_dict(agent_info)
+                
+        self.cg = merged_cg
+        self.agents = merged_agents

@@ -20,6 +20,14 @@
             "args": ["--output_dir", "./output/tj/dep2_long2", "--debug"]
         },
         {
+            "name": "Demo",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "demo.py",
+            "console": "integratedTerminal",
+            "args": ["--output_dir", "./output/tj/dep2_long2", "--fragment_id", "7_28_1 R21", "--ego_id", "26", "--target_id", "26"]
+        },
+        { 
             "name": "Visualization",
             "type": "debugpy",
             "request": "launch",

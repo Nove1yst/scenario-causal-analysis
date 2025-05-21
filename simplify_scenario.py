@@ -9,11 +9,11 @@ ego_id_dict = {
 }
 
 if __name__ == "__main__":
-    modifier = SceneEditor(data_dir="./data/tj", output_dir="./output/tj/causal_analysis/debug")
+    modifier = SceneEditor(data_dir="./data/tj", output_dir="./output/tj/dep2_long2")
 
-    modifier.load_all(fragment_id='8_11_1 R20', ego_id=37)
-    modifier.filter_and_visualize_scenario()
-    # for fragment_id in fragment_id_list:
-    #     for ego_id in ego_id_dict[fragment_id]:
-    #         modifier.load_all(fragment_id=fragment_id, ego_id=ego_id)
-    #         modifier.filter_and_visualize_scenario()
+    # modifier.load_all(fragment_id='8_11_1 R20', ego_id=37)
+    # modifier.filter_and_visualize_scenario()
+    for fragment_id in fragment_id_list:
+        for ego_id in ego_id_dict[fragment_id]:
+            modifier.load_all(fragment_id=fragment_id, ego_id=ego_id)
+            modifier.filter_and_visualize_scenario()

@@ -31,7 +31,7 @@ def main():
     editor.load_all(args.fragment_id, args.ego_id)
     
     # 准备边属性
-    edge_attributes = ['left turn and right turn conflict: end side']
+    edge_attributes = ['converging']
     # if args.conflict_type:
     #     edge_attributes = [args.conflict_type]
 
@@ -41,7 +41,7 @@ def main():
                                  "cross_type": ["LeftTurn"], 
                                  "signal_violation": ["No violation of traffic lights"], 
                                  "retrograde_type": "normal", 
-                                 "cardinal_direction": "e1_s3"})
+                                 "cardinal_direction": "s1_w4"})
     
     # 添加新代理并可视化
     print("添加新代理到场景并生成轨迹...")

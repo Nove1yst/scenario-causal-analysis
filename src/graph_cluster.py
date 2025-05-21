@@ -452,4 +452,4 @@ if __name__ == '__main__':
 
     cgs_dict = load_cgs(save_dir)
 
-    cluster_causal_graphs(cgs_dict, n_clusters=5, cluster_method='spectral', save_path=save_dir)
+    cluster_causal_graphs(cgs_dict, n_clusters=4, cluster_method='spectral', save_path=save_dir)

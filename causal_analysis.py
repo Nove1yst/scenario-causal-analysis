@@ -31,7 +31,7 @@ if __name__ == "__main__":
     if args.debug:
         fragment_id = '8_11_1 R20'
         ego_id = 37
-        causal_analyzer.set_fragment_id(fragment_id)
+        causal_analyzer.select_fragment(fragment_id, ego_id)
         # causal_analyzer.detect_risk(ego_id, 
         #                             visualize_acc=False, 
         #                             visualize_ssm=True, 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     else:
         for fragment_id in fragment_id_list:
             for ego_id in ego_id_dict[fragment_id]:
-                causal_analyzer.set_fragment_id(fragment_id)
+                causal_analyzer.select_fragment(fragment_id, ego_id)
                 # causal_analyzer.detect_risk(ego_id, 
                 #                             depth=0, max_depth=args.depth,
                 #                             visualize_acc=False,
