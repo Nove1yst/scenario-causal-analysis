@@ -1,1 +1,1 @@
-python3 demo_add_agent.py --fragment_id "7_28_1 R21" --ego_id 26 --target_id 26
+python3 demo_add_agent.py --fragment_id "8_11_1 R20" --ego_id 60 --target_id 60

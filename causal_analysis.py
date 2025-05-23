@@ -44,11 +44,11 @@ if __name__ == "__main__":
         for fragment_id in fragment_id_list:
             for ego_id in ego_id_dict[fragment_id]:
                 causal_analyzer.select_fragment(fragment_id, ego_id)
-                # causal_analyzer.detect_risk(ego_id, 
-                #                             depth=0, max_depth=args.depth,
-                #                             visualize_acc=False,
-                #                             visualize_cg=True,
-                #                             visualize_ssm=True)
+                causal_analyzer.detect_risk(ego_id, 
+                                            depth=0, max_depth=args.depth,
+                                            visualize_acc=False,
+                                            visualize_cg=True,
+                                            visualize_ssm=True)
                 causal_analyzer.load_risk_events(fragment_id, ego_id)
                 causal_analyzer.extract_and_simplify(ego_id, visualize=True, save=True)
                 # causal_analyzer.load_cg(fragment_id, ego_id)

@@ -1,0 +1,69 @@
+{
+    "causal_graph": {
+        "1002": [
+            {
+                "child_id": "1001",
+                "edge_attributes": [
+                    "left turn and straight cross conflict: opposite side"
+                ]
+            }
+        ],
+        "1003": [
+            {
+                "child_id": "1002",
+                "edge_attributes": [
+                    "yellow-light running",
+                    "remaining in intersection"
+                ]
+            },
+            {
+                "child_id": "1001",
+                "edge_attributes": [
+                    "yellow-light running",
+                    "remaining in intersection"
+                ]
+            }
+        ]	
+    },
+    "agents": {
+        "1003": {
+            "id": 1003,
+            "agent_type": "mv",
+            "agent_class": "car",
+            "cross_type": [
+                "StraightCross"
+            ],
+            "signal_violation": [
+                "yellow-light running"
+            ],
+            "retrograde_type": "normal",
+            "cardinal_direction": "e2_w5"
+        },
+        "1002": {
+            "id": 1002,
+            "agent_type": "mv",
+            "agent_class": "car",
+            "cross_type": [
+                "LeftTurn"
+            ],
+            "signal_violation": [
+                "No violation of traffic lights"
+            ],
+            "retrograde_type": "normal",
+            "cardinal_direction": "n1_e5"
+        },
+        "1001": {
+            "id": 1001,
+            "agent_type": "mv",
+            "agent_class": "car",
+            "cross_type": [
+                "StraightCross"
+            ],
+            "signal_violation": [
+                "No violation of traffic lights"
+            ],
+            "retrograde_type": "normal",
+            "cardinal_direction": "s1_n3"
+        }
+    }
+}

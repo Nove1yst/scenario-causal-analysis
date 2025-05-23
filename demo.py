@@ -8,23 +8,19 @@
 import os
 import sys
 import argparse
-from src.scene_editor import SceneEditor
+from src.scenario_editor import ScenarioEditor
 from src.agent import Agent
 
 def main():
-    parser = argparse.ArgumentParser(description='添加新代理到场景并可视化')
+    parser = argparse.ArgumentParser(description='合并因果图')
     parser.add_argument('--data_dir', type=str, default="./data/tj", help='数据目录路径')
-    parser.add_argument('--output_dir', type=str, default="./output/tj/dep2_long2", help='输出目录路径')
+    parser.add_argument('--output_dir', type=str, default="./output/tj/dep2_long", help='输出目录路径')
     parser.add_argument('--fragment_id', type=str, default="8_11_1 R20", help='片段ID')
-    parser.add_argument('--ego_id', type=int, default=37, help='自车ID')
-    parser.add_argument('--conflict_type', type=str, default=None, choices=['following', 'diverging', 'converging', 'crossing conflict: same cross type'], 
-                        help='冲突类型，不指定则随机生成')
-    parser.add_argument('--target_id', type=int, default=37, help='目标节点ID，不指定则随机选择')
-    
+    parser.add_argument('--ego_id', type=int, default=60, help='自车ID')
     args = parser.parse_args()
     
     # 创建场景修改器
-    editor = SceneEditor(args.data_dir, args.output_dir)
+    editor = ScenarioEditor(args.data_dir, args.output_dir)
     
     # 加载数据
     print(f"加载片段 {args.fragment_id} 的数据...")
@@ -37,33 +33,25 @@ def main():
     #     edge_attributes = [args.conflict_type]
     frame_shift_list = [25, 40]
 
-    editor.merge_graphs("output/tj/dep2_long2/7_28_1 R21_26/cg_7_28_1 R21_26_mod.json")
-    editor.visualize_graph()
-
-#     new_agent = Agent.from_dict({"id": 1001, 
-#                                  "agent_type": "mv", 
-#                                  "agent_class": "car", 
-#                                  "cross_type": ["LeftTurn"], 
-#                                  "signal_violation": ["No violation of traffic lights"], 
-#                                  "retrograde_type": "normal", 
-#                                  "cardinal_direction": "s1_w4"})
+    new_agent = Agent.from_dict({"id": 1001, 
+                                 "agent_type": "mv", 
+                                 "agent_class": "car", 
+                                 "cross_type": ["LeftTurn"], 
+                                 "signal_violation": ["No violation of traffic lights"], 
+                                 "retrograde_type": "normal", 
+                                 "cardinal_direction": "s1_w4"})
     
-#     new_agent_2 = Agent.from_dict({"id": 1002, 
-#                                  "agent_type": "mv", 
-#                                  "agent_class": "car", 
-#                                  "cross_type": ["LeftTurn"], 
-#                                  "signal_violation": ["No violation of traffic lights"], 
-#                                  "retrograde_type": "normal", 
-#                                  "cardinal_direction": "s1_w4"})
+    new_agent_2 = Agent.from_dict({"id": 1002, 
+                                 "agent_type": "mv", 
+                                 "agent_class": "car", 
+                                 "cross_type": ["LeftTurn"], 
+                                 "signal_violation": ["No violation of traffic lights"], 
+                                 "retrograde_type": "normal", 
+                                 "cardinal_direction": "s1_w4"})
     
-#     # 添加新代理并可视化
-#     print("添加新代理到场景并生成轨迹...")
-#     editor.generate_scenario([new_agent, new_agent_2], [edge_attributes, edge_attributes_2], frame_shift_list)
-#     # new_agent_id, track_data = editor.add_and_visualize_new_agent(
-#     #     new_agent=new_agent,
-#     #     target_node_id=args.target_id,
-#     #     edge_attributes=edge_attributes
-#     # )
+    # 添加新代理并可视化
+    print("添加新代理到场景并生成轨迹...")
+    editor.add_agents([new_agent, new_agent_2], [edge_attributes, edge_attributes_2], frame_shift_list)
     
 #     # if new_agent_id:
 #     #     print(f"成功生成新代理 ID: {new_agent_id}")

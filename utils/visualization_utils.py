@@ -60,7 +60,7 @@ import networkx as nx
 #         plt.savefig(save_path)
 #     plt.close()
 
-def create_gif_from_scenario(track_info, frame_info, track_id, scene_id, out_path_scene_id,gif_number):
+def create_gif_from_scenario(track_info, frame_info, track_id, scene_id, out_path_scene_id, gif_number):
     images = []
     gif_path = os.path.join(out_path_scene_id, 'gif')
     os.makedirs(gif_path, exist_ok=True)
@@ -173,8 +173,8 @@ def draw_track(tp_id, track_info, ax, color_map, n):
         track = track_info
     x = np.array(track['track_info']['x'])
     y = np.array(track['track_info']['y'])
-    ax.scatter(x[track['anomalies'][:len(x)]], y[track['anomalies'][:len(y)]], color='k',
-               label='Anomalies', zorder=3, s=0.7)
+    # ax.scatter(x[track['anomalies'][:len(x)]], y[track['anomalies'][:len(y)]], color='k',
+    #            label='Anomalies', zorder=3, s=0.7)
 
     ax.scatter(x[0], y[0], color="green", marker='o', label='Start')
     ax.scatter(x[-1], y[-1], color="red", marker='x', label='End')

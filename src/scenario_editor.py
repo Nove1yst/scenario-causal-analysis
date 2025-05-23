@@ -14,7 +14,7 @@ from utils.visualization_utils import create_gif_from_scenario
 from src.my_utils import reverse_cardinal_direction, infer_cardinal_direction
 from src.agent import Agent
 
-class SceneEditor:
+class ScenarioEditor:
     def __init__(self, data_dir: str, output_dir: str = None, conflict_type_config: str = None):
         """
         初始化场景修改器
@@ -30,7 +30,7 @@ class SceneEditor:
 
         self.risk_events = None
         self.cg = None
-        self.agents = None
+        self.tps = None
         self.fragment_id = None
         self.ego_id = None
         self.frame_data = None
@@ -124,6 +124,35 @@ class SceneEditor:
     #     except Exception as e:
     #         print(f"加载风险事件时出错: {e}")
     #         return False
+    def load_graph(self, cg_file: str, ego_id: int):
+        """
+        从JSON文件加载因果图
+        """
+        with open(cg_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            serializable_cg = data['causal_graph']
+            serializable_agents = data.get('agents', {})
+        
+        self.cg = {}
+        for parent_id, edges in serializable_cg.items():
+            parent_id = int(parent_id) if parent_id.isdigit() else parent_id
+            self.cg[parent_id] = []
+            for edge in edges:
+                self.cg[parent_id].append((
+                    int(edge['child_id']) if edge['child_id'].isdigit() else edge['child_id'],
+                    edge['edge_attributes']
+                ))
+        
+        # 加载agents字典
+        self.tps = {}
+        for agent_id, agent_dict in serializable_agents.items():
+            agent_id = int(agent_id) if agent_id.isdigit() else agent_id
+            self.tps[agent_id] = Agent.from_dict(agent_dict)
+        
+        self.fragment_id = None
+        self.ego_id = ego_id
+        print(f"成功加载因果图: {cg_file}")
+        return True
         
     def load_cg(self, fragment_id: str, ego_id: int) -> bool:
         """
@@ -161,10 +190,10 @@ class SceneEditor:
                     ))
             
             # 加载agents字典
-            self.agents = {}
+            self.tps = {}
             for agent_id, agent_dict in serializable_agents.items():
                 agent_id = int(agent_id) if agent_id.isdigit() else agent_id
-                self.agents[agent_id] = Agent.from_dict(agent_dict)
+                self.tps[agent_id] = Agent.from_dict(agent_dict)
             
             self.fragment_id = fragment_id
             self.ego_id = ego_id
@@ -278,7 +307,7 @@ class SceneEditor:
             'Signal_Violation_Behavior': agent.signal_violation,
             'retrograde_type': agent.retrograde_type,
             'cardinal direction': agent.cardinal_direction,
-            'num': 5
+            'num': 6
         }
         
         # 根据边属性和冲突类型生成轨迹
@@ -293,56 +322,56 @@ class SceneEditor:
                 edge_attributes = attrs
                 break
 
-        # 根据冲突类型生成轨迹
-        conflict_type = None
-        for attr in edge_attributes:
-            if attr in self.conflict_types['head2tail_types']:
-                conflict_type = attr
-                break
-            elif attr in self.conflict_types['head2head_types']:
-                conflict_type = attr
-                break
-            elif attr in self.conflict_types['unusual_behavior']:
-                conflict_type = attr
-                break
+        # # 根据冲突类型生成轨迹
+        # conflict_type = None
+        # for attr in edge_attributes:
+        #     if attr in self.conflict_types['head2tail_types']:
+        #         conflict_type = attr
+        #         break
+        #     elif attr in self.conflict_types['head2head_types']:
+        #         conflict_type = attr
+        #         break
+        #     elif attr in self.conflict_types['unusual_behavior']:
+        #         conflict_type = attr
+        #         break
                 
-        # 默认为跟随行为
-        if not conflict_type:
-            conflict_type = 'following'
+        # # 默认为跟随行为
+        # if not conflict_type:
+        #     conflict_type = 'following'
         
         # 如果没有目标节点，使用ego
         if not target_node_id:
             target_node_id = self.ego_id
             
         # 获取目标节点的轨迹
-        target_frames = self.frame_data_processed[self.fragment_id]
-        target_track = []
+        # target_frames = self.frame_data_processed[self.fragment_id]
+        # target_track = []
         
-        # 收集目标节点在所有帧中的位置数据
-        for frame_id in range(start_frame, end_frame + 1):
-            if frame_id < len(target_frames) and target_node_id in target_frames[frame_id]:
-                target_data = target_frames[frame_id][target_node_id]
-                target_track.append({
-                    'frame_id': frame_id,
-                    'x': target_data['x'],
-                    'y': target_data['y'],
-                    'vx': target_data['vx'],
-                    'vy': target_data['vy'],
-                    'heading_rad': target_data.get('heading_rad', 0)
-                })
+        # # 收集目标节点在所有帧中的位置数据
+        # for frame_id in range(start_frame, end_frame + 1):
+        #     if frame_id < len(target_frames) and target_node_id in target_frames[frame_id]:
+        #         target_data = target_frames[frame_id][target_node_id]
+        #         target_track.append({
+        #             'frame_id': frame_id,
+        #             'x': target_data['x'],
+        #             'y': target_data['y'],
+        #             'vx': target_data['vx'],
+        #             'vy': target_data['vy'],
+        #             'heading_rad': target_data.get('heading_rad', 0)
+        #         })
                 
-        if not target_track:
-            raise ValueError(f"无法获取目标节点 {target_node_id} 的轨迹数据")
+        # if not target_track:
+        #     raise ValueError(f"无法获取目标节点 {target_node_id} 的轨迹数据")
         
         # get reference track
         reference_track_id = 0
-        if conflict_type in self.conflict_types['head2tail_types']:
-            cd = agent.cardinal_direction
-            ct = agent.cross_type[0]
+        # if conflict_type in self.conflict_types['head2tail_types']:
+        cd = agent.cardinal_direction
+        ct = agent.cross_type[0]
 
-            for k in self.typical_tracks.keys():
-                if k in ct.lower():
-                    reference_track_id = self.typical_tracks[k].get(cd, [])
+        for k in self.typical_tracks.keys():
+            if k in ct.lower():
+                reference_track_id = self.typical_tracks[k].get(cd, [])
 
         if reference_track_id:
             # reference_track_id = random.choice(reference_track_id)
@@ -351,7 +380,7 @@ class SceneEditor:
         reference_track = []
         
         if not frame_shift:
-            frame_shift = 25
+            frame_shift = -20
         aligned_frame_id = start_frame - frame_shift
         ref_start_frame = min(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
         ref_end_frame = max(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
@@ -369,7 +398,6 @@ class SceneEditor:
                 })
             aligned_frame_id += 1
             
-        # # 生成轨迹点
         # offset_x, offset_y = 0, 0
         # scale_vx, scale_vy = 1.0, 1.0
         
@@ -547,27 +575,27 @@ class SceneEditor:
                 nodes.add(child_id)
         return nodes
         
-    def save_modified_risk_events(self) -> str:
-        """
-        保存修改后的风险事件数据
+    # def save_modified_risk_events(self) -> str:
+    #     """
+    #     保存修改后的风险事件数据
         
-        Returns:
-            str: 保存的文件路径
-        """
-        if not self.risk_events or not self.fragment_id or not self.ego_id:
-            raise ValueError("请先加载风险事件数据")
+    #     Returns:
+    #         str: 保存的文件路径
+    #     """
+    #     if not self.risk_events or not self.fragment_id or not self.ego_id:
+    #         raise ValueError("请先加载风险事件数据")
             
-        save_path = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}")
-        os.makedirs(save_path, exist_ok=True)
+    #     save_path = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}")
+    #     os.makedirs(save_path, exist_ok=True)
         
-        # 生成新的文件名，避免覆盖原始文件
-        modified_file = os.path.join(save_path, f"modified_risk_events_{self.fragment_id}_{self.ego_id}.pkl")
+    #     # 生成新的文件名，避免覆盖原始文件
+    #     modified_file = os.path.join(save_path, f"modified_risk_events_{self.fragment_id}_{self.ego_id}.pkl")
         
-        with open(modified_file, "wb") as f:
-            pickle.dump(self.risk_events, f)
+    #     with open(modified_file, "wb") as f:
+    #         pickle.dump(self.risk_events, f)
             
-        print(f"修改后的风险事件已保存到: {modified_file}")
-        return modified_file
+    #     print(f"修改后的风险事件已保存到: {modified_file}")
+    #     return modified_file
 
     def add_node_and_edge_to_cg(self, new_node_id: int, target_node_id: int, edge_attributes: list = []) -> bool:
         """
@@ -614,7 +642,7 @@ class SceneEditor:
         print(f"成功添加节点 {new_node_id} 和到 {target_node_id} 的边")
         return True
 
-    def filter_and_visualize_scenario(self, frame_id: int = None, new_agents: Dict[int, dict] = None):
+    def filter_and_visualize_scenario(self, frame_id: int = None, new_agents: Dict[int, dict] = None, output_dir: str = None):
         """
         过滤并可视化因果图中的节点对应的代理轨迹，支持显示新添加的代理
         
@@ -692,8 +720,8 @@ class SceneEditor:
                 if agent_id not in tracks_dict:
                     tracks_dict[agent_id] = track_data
         
-        # 创建输出目录
-        output_dir = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}", "modified_scenario")
+        if output_dir is None:
+            output_dir = os.path.join(self.output_dir, f"{self.fragment_id}_{self.ego_id}", "modified_scenario")
         os.makedirs(output_dir, exist_ok=True)
         
         create_gif_from_scenario(
@@ -707,7 +735,7 @@ class SceneEditor:
         
         print(f"已保存修改后的场景可视化结果到: {output_dir}")
 
-    def visualize_graph(self, save_pic=True, save_pdf=False):
+    def visualize_graph(self, save_dir = None, save_pic=True, save_pdf=False):
         """
         使用Graphviz可视化因果图，避免边标签重合和节点重合问题。
         如果两个节点之间已经存在边，则合并边标签而不是添加新边。
@@ -747,7 +775,7 @@ class SceneEditor:
                 all_nodes.add(influenced_agent)
         
         for node in all_nodes:
-            agent = self.agents.get(node, None)
+            agent = self.tps.get(node, None)
             if agent:
                 node_label = f"{node}\n{agent.agent_class}\n"
                 
@@ -793,7 +821,7 @@ class SceneEditor:
         dot.attr(fontsize='20')
         dot.attr(labelloc='t')
 
-        save_path = os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
+        save_path = save_dir if save_dir else os.path.join(self.output_dir, f"{fragment_id}_{ego_id}")
         os.makedirs(save_path, exist_ok=True)     
         dot_path = os.path.join(save_path, f"modified_cg_{fragment_id}_{ego_id}")
         if save_pic:
@@ -822,6 +850,9 @@ class SceneEditor:
         existing_nodes = self.get_all_nodes()
         if not existing_nodes:
             raise ValueError("因果图中没有现有节点")
+        
+        # Add new agent to agents dict
+        self.tps[new_agent.id] = new_agent
             
         # 生成新代理ID（如果未提供）
         # if not new_agent:
@@ -859,7 +890,7 @@ class SceneEditor:
         
         return new_agent.id, track_data
 
-    def generate_scenario(self, new_agents, new_edges, frame_shift_list):
+    def add_agents(self, new_agents, new_edges, frame_shift_list):
         """
         不依赖原始场景数据，直接根据给定的因果图和典型轨迹库生成场景。
         轨迹全部从典型轨迹库中获取。
@@ -899,14 +930,16 @@ class SceneEditor:
             
         # 合并因果图
         merged_cg = self.cg.copy()
-        merged_agents = self.agents.copy()
+        merged_agents = self.tps.copy()
                 
         for parent_id, edges in cg.items():
             parent_id = int(parent_id) if parent_id.isdigit() else parent_id
             if parent_id not in merged_cg:
                 merged_cg[parent_id] = []
                 
-            for child_id, edge_attr in edges.items():
+            for edge in edges:
+                child_id = edge['child_id']
+                edge_attr = edge['edge_attributes']
                 child_id = int(child_id) if child_id.isdigit() else child_id
                 # 检查是否已存在相同的边
                 edge_exists = False
@@ -931,4 +964,107 @@ class SceneEditor:
                 merged_agents[agent_id] = Agent.from_dict(agent_info)
                 
         self.cg = merged_cg
-        self.agents = merged_agents
+        self.tps = merged_agents
+
+    def merge_scenes(self, cg_file: str, merged_fragment_id: str, merged_ego_id: int, frame_shift: int = 0) -> dict:
+        """
+        合并两个场景，将两个因果图中的所有交通参与者添加到一个场景内
+        
+        Args:
+            cg_file: 第二个因果图文件路径
+            frame_shift: 第二个场景的帧偏移量，用于调整时间对齐
+            
+        Returns:
+            dict: 合并后的场景数据，包含所有交通参与者的轨迹
+        """
+
+        ego_track = self.track_change[self.fragment_id][self.ego_id]
+        start_frame = min(ego_track['track_info']['frame_id'])
+        end_frame = max(ego_track['track_info']['frame_id'])
+        original_start_frame = min(self.tp_info[merged_fragment_id][merged_ego_id]['State']['frame_id'])
+        original_end_frame = max(self.tp_info[merged_fragment_id][merged_ego_id]['State']['frame_id'])
+
+        original_nodes = self.get_all_nodes()
+        original_agents = self.tps.copy()
+
+        self.merge_graphs(cg_file)
+        
+        all_nodes = self.get_all_nodes()
+        
+        # 准备轨迹数据字典
+        merged_tracks = {}
+        
+        # 获取原始场景的轨迹数据
+        for node_id in all_nodes:
+            # 检查节点是否在原始场景中
+            if node_id not in original_agents:
+                ref_start_frame = min(self.tp_info[merged_fragment_id][node_id]['State']['frame_id'])
+                ref_end_frame = max(self.tp_info[merged_fragment_id][node_id]['State']['frame_id'])
+                aligned_frame_id = start_frame - frame_shift - original_start_frame + ref_start_frame
+
+                agent = self.tps[node_id]
+                track_data = {
+                    'track_info': {
+                        'frame_id': [],
+                        'x': [],
+                        'y': [],
+                        'vx': [],
+                        'vy': [],
+                        'ax': [],
+                        'ay': [],
+                        'heading_rad': [],
+                        'width': [],
+                        'length': []
+                    },
+                    # 'anomalies': np.zeros(frame_count, dtype=bool),
+                    'Type': agent.agent_type,
+                    'Class': agent.agent_class,
+                    'CrossType': agent.cross_type,
+                    'Signal_Violation_Behavior': agent.signal_violation,
+                    'retrograde_type': agent.retrograde_type,
+                    'cardinal direction': agent.cardinal_direction,
+                    'num': 6
+                }
+                track = []
+
+                for frame_id in range(ref_start_frame, ref_end_frame+1):
+                    reference_data = self.frame_data_processed[merged_fragment_id][frame_id][node_id]
+                    track.append({
+                            'frame_id': aligned_frame_id,
+                            'x': reference_data['x'],
+                            'y': reference_data['y'],
+                            'vx': reference_data['vx'],
+                            'vy': reference_data['vy'],
+                            'ax': reference_data['ax'],
+                            'ay': reference_data['ay'],
+                            'heading_rad': reference_data.get('heading_rad', 0)
+                        })
+                    aligned_frame_id += 1
+
+                length = self.tp_info[merged_fragment_id][node_id]['Length']
+                width = self.tp_info[merged_fragment_id][node_id]['Width']
+                for trk in track:
+                    track_data['track_info']['frame_id'].append(trk['frame_id'])
+                    track_data['track_info']['x'].append(trk['x'])
+                    track_data['track_info']['y'].append(trk['y'])
+                    track_data['track_info']['vx'].append(trk['vx'])
+                    track_data['track_info']['vy'].append(trk['vy'])
+                    track_data['track_info']['ax'].append(trk['ax'])
+                    track_data['track_info']['ay'].append(trk['ay'])
+                    track_data['track_info']['heading_rad'].append(trk['heading_rad'])
+                    track_data['track_info']['width'].append(width)
+                    track_data['track_info']['length'].append(length)
+
+                for key in track_data['track_info']:
+                    if key != 'frame_id':  # frame_id通常保持为列表
+                        track_data['track_info'][key] = np.array(track_data['track_info'][key])
+                    
+                merged_tracks[node_id] = track_data
+        
+        # 可视化合并后的场景
+        self.filter_and_visualize_scenario(new_agents=merged_tracks)
+        
+        # 更新并保存因果图可视化
+        self.visualize_graph()
+        
+        return merged_tracks
