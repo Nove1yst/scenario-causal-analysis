@@ -9,7 +9,7 @@ class ScenarioGenerator(ScenarioEditor):
         super().__init__(data_dir, output_dir, conflict_type_config)
         self.tracks = {}
 
-    def generate_track(self, agent, edges: list, frame_shift: int, reference_id: int = 1):
+    def generate_track(self, agent, edges: list, frame_shift: int, reference_id: int = 1, offset = None):
         """
         根据agent信息和边属性生成轨迹数据
         
@@ -20,18 +20,8 @@ class ScenarioGenerator(ScenarioEditor):
         Returns:
             dict: 生成的轨迹数据
         """
-        # if not edges:
-        #     edges = self.generate_conflict()
-        # if not agent:
-        #     agent = self.generate_agent(1001, edges)
-        
         if not self.frame_data_processed:
             raise ValueError("请先加载数据")
-            
-        # ego_track = self.track_change[self.fragment_id][self.ego_id]
-        # start_frame = min(ego_track['track_info']['frame_id'])
-        # end_frame = max(ego_track['track_info']['frame_id'])
-        # frame_count = end_frame - start_frame + 1
         
         track_data = {
             'track_info': {
@@ -54,8 +44,6 @@ class ScenarioGenerator(ScenarioEditor):
             'cardinal direction': agent.cardinal_direction,
             'num': 6
         }
-        
-        # TODO: 根据边属性和冲突类型生成轨迹
         
         # get reference track
         reference_track_id = 0
@@ -89,15 +77,13 @@ class ScenarioGenerator(ScenarioEditor):
             aligned_frame_id += 1
             
         for ref in reference_track:
-            
             # # 计算新位置
-            # new_x = ref['x'] + offset_x
-            # new_y = ref['y'] + offset_y 
-            new_x = ref['x']
-            new_y = ref['y']
-            
-            # new_vx = ref['vx'] * scale_vx
-            # new_vy = ref['vy'] * scale_vy
+            if offset:
+                new_x = ref['x'] + offset[0]
+                new_y = ref['y'] + offset[1]
+            else:
+                new_x = ref['x']
+                new_y = ref['y']
 
             new_vx = ref['vx']
             new_vy = ref['vy']
@@ -131,12 +117,12 @@ class ScenarioGenerator(ScenarioEditor):
             
         # 转换为numpy数组，与原始数据格式一致
         for key in track_data['track_info']:
-            if key != 'frame_id':  # frame_id通常保持为列表
+            if key != 'frame_id':
                 track_data['track_info'][key] = np.array(track_data['track_info'][key])
         
         return track_data
 
-    def generate_scenario(self, cg_file: str, ego_id: int, frame_shift, reference_id, output_dir: str = None):
+    def generate_scenario(self, cg_file: str, ego_id: int, frame_shift, reference_id, offset = None, output_dir: str = None):
         """
         根据给定的因果图和典型轨迹库生成场景。
         """
@@ -147,7 +133,7 @@ class ScenarioGenerator(ScenarioEditor):
         for tp_id, tp in self.tps.items():
             shift = frame_shift[tp_id]
             ref_id = reference_id[tp_id]
-            track_data = self.generate_track(tp, None, shift, ref_id)
+            track_data = self.generate_track(tp, None, shift, ref_id, offset.get(tp_id, None))
             self.tracks[tp_id] = track_data
 
         self.visualize_scenario(tps=self.tracks, save_dir=output_dir)

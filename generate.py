@@ -17,9 +17,10 @@ def main():
     generator.load_conflict_types()
     generator.load_typical_tracks()
     generator.load_data()
-    frame_shift = {1003: 0, 1002: 70, 1001: 75}
-    reference_id = {1003: 2, 1002: 1, 1001: 1}
-    generator.generate_scenario(args.cg_file, args.ego_id, frame_shift, reference_id, args.save_dir)
+    offset =  {1005: (7, 0)}
+    frame_shift = {1005: 10, 1004: 103, 1003: 0, 1002: 70, 1001: 75}
+    reference_id = {1005: 2, 1004: 0, 1003: 2, 1002: 1, 1001: 1}
+    generator.generate_scenario(args.cg_file, args.ego_id, frame_shift, reference_id, offset, args.save_dir)
     
 if __name__ == "__main__":
     main() 

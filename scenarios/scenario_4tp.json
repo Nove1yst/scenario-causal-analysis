@@ -15,7 +15,7 @@
                 ]
             }
         ],
-        "1004": [
+        "1001": [
             {
                 "child_id": "1003",
                 "edge_attributes": [
@@ -23,9 +23,57 @@
                     "remaining in intersection"
                 ]
             }
+        ],
+        "1003": [
+            {
+                "child_id": "1005",
+                "edge_attributes": [
+                    "following"
+                ]
+            }
+        ],
+        "1004": [
+            {
+                "child_id": "1003",
+                "edge_attributes": [
+                    "right turn and straight cross conflict: end side"
+                ]
+            },
+            {
+                "child_id": "1005",
+                "edge_attributes": [
+                    "right turn and straight cross conflict: end side"
+                ]
+            }
         ]
     },
     "agents": {
+        "1005": {
+            "id": 1005,
+            "agent_type": "mv",
+            "agent_class": "car",
+            "cross_type": [
+                "StraightCross"
+            ],
+            "signal_violation": [
+                "No violation of traffic lights"
+            ],
+            "retrograde_type": "normal",
+            "cardinal_direction": "e2_w5"
+        },
+        "1004": {
+            "id": 1004,
+            "agent_type": "mv",
+            "agent_class": "car",
+            "cross_type": [
+                "RightTurn"
+            ],
+            "signal_violation": [
+                "No violation of traffic lights"
+            ],
+            "retrograde_type": "normal",
+            "cardinal_direction": "n1_w5"
+        },
         "1003": {
             "id": 1003,
             "agent_type": "mv",

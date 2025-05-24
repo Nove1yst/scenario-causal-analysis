@@ -48,12 +48,15 @@ if __name__ == "__main__":
         "retrograde_type": set(),
         "cardinal_direction": set()
     }
-    cross_type_dict = {
-        "straight": {},
-        "right": {},
-        "left": {}
-    }
+    # cross_type_dict = {
+    #     "straight": {},
+    #     "right": {},
+    #     "left": {}
+    # }
 
+    cross_type_dict = {
+        "straight": []
+    }
     unclassified = set()
 
     for fragment_id in fragment_id_list:
@@ -88,28 +91,30 @@ if __name__ == "__main__":
             else:
                 cardinal_direction = None
 
-            if agent_type == 'mv' and cardinal_direction:
-                if 'straight' in cross_type.lower():
-                    if cardinal_direction in cross_type_dict['straight'].keys():
-                        cross_type_dict['straight'][cardinal_direction].append(id)
-                    else:
-                        cross_type_dict['straight'][cardinal_direction] = [id]
-                elif 'left' in cross_type.lower():
-                    if cardinal_direction in cross_type_dict['left'].keys():
-                        cross_type_dict['left'][cardinal_direction].append(id)
-                    else:
-                        cross_type_dict['left'][cardinal_direction] = [id]
-                elif 'right' in cross_type.lower():
-                    if cardinal_direction in cross_type_dict['right'].keys():
-                        cross_type_dict['right'][cardinal_direction].append(id)
-                    else:
-                        cross_type_dict['right'][cardinal_direction] = [id]
+            # if agent_type == 'nmv' and cardinal_direction:
+            #     if 'straight' in cross_type.lower():
+            #         if cardinal_direction in cross_type_dict['straight'].keys():
+            #             cross_type_dict['straight'][cardinal_direction].append(id)
+            #         else:
+            #             cross_type_dict['straight'][cardinal_direction] = [id]
+            #     elif 'left' in cross_type.lower():
+            #         if cardinal_direction in cross_type_dict['left'].keys():
+            #             cross_type_dict['left'][cardinal_direction].append(id)
+            #         else:
+            #             cross_type_dict['left'][cardinal_direction] = [id]
+            #     elif 'right' in cross_type.lower():
+            #         if cardinal_direction in cross_type_dict['right'].keys():
+            #             cross_type_dict['right'][cardinal_direction].append(id)
+            #         else:
+            #             cross_type_dict['right'][cardinal_direction] = [id]
+            if agent_type == 'ped':
+                cross_type_dict['straight'].append(id)
 
     print(meta_data_dict)
     print()
     print(unclassified)
     
-    with open("typical_track.json", "w", encoding="utf-8") as f:
+    with open("typical_track_ped.json", "w", encoding="utf-8") as f:
         json.dump(cross_type_dict, f, indent=4, ensure_ascii=False)
     print(cross_type_dict)
         
