@@ -1,0 +1,81 @@
+{
+    "causal_graph": {
+        "1002": [
+            {
+                "child_id": "1001",
+                "edge_attributes": [
+                    "left turn and straight cross conflict: opposite side"
+                ]
+            },
+            {
+                "child_id": "1003",
+                "edge_attributes": [
+                    "yellow-light running",
+                    "remaining in intersection"
+                ]
+            }
+        ],
+        "2001": [
+            {
+                "child_id": "1003",
+                "edge_attributes": [
+                    "front_retrograde"
+                ]
+            }
+        ]   
+    },
+    "agents": {
+        "2001": {
+            "id": 2001,
+            "agent_type": "nmv",
+            "agent_class": "motorcycle",
+            "cross_type": [
+                "LeftTurn"
+            ],
+            "signal_violation": [
+                "No violation of traffic lights"
+            ],
+            "retrograde_type": "front_retrograde",
+            "cardinal_direction": "n4_e5"
+        },
+        "1003": {
+            "id": 1003,
+            "agent_type": "mv",
+            "agent_class": "car",
+            "cross_type": [
+                "StraightCross"
+            ],
+            "signal_violation": [
+                "No violation of traffic lights"
+            ],
+            "retrograde_type": "normal",
+            "cardinal_direction": "e2_w5"
+        },
+        "1002": {
+            "id": 1002,
+            "agent_type": "mv",
+            "agent_class": "car",
+            "cross_type": [
+                "LeftTurn"
+            ],
+            "signal_violation": [
+                "yellow-light running"
+            ],
+            "retrograde_type": "normal",
+            "cardinal_direction": "n1_e5"
+        },
+        "1001": {
+            "id": 1001,
+            "agent_type": "mv",
+            "agent_class": "car",
+            "cross_type": [
+                "StraightCross"
+            ],
+            "signal_violation": [
+                "yellow-light running"
+            ],
+            "retrograde_type": "normal",
+            "cardinal_direction": "s1_n3"
+        }
+    }
+}

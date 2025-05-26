@@ -37,6 +37,8 @@ class ScenarioEditor:
         self.frame_data_processed = None
         self.conflict_types = {}
         self.typical_tracks = {}
+        self.typical_tracks_nmv = {}
+        self.typical_tracks_ped = {}
         self.typical_tracks_frag = "7_28_1 R21"
 
     def load_all(self, fragment_id: str, ego_id: int):
@@ -72,18 +74,26 @@ class ScenarioEditor:
         返回:
             dict: 加载的交叉类型字典
         """
-        file_path = os.path.join(self.data_dir, "typical_track.json")
+        mv_file_path = os.path.join(self.data_dir, "typical_track.json")
+        nmv_file_path = os.path.join(self.data_dir, "typical_track_nmv.json")
+        ped_file_path = os.path.join(self.data_dir, "typical_track_ped.json")
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(mv_file_path, "r", encoding="utf-8") as f:
                 self.typical_tracks = json.load(f)
-            print(f"成功加载文件: {file_path}")
+            with open(nmv_file_path, "r", encoding="utf-8") as f:
+                self.typical_tracks_nmv = json.load(f)
+            with open(ped_file_path, "r", encoding="utf-8") as f:
+                self.typical_tracks_ped = json.load(f)
+            print(f"Successfully loaded file: {mv_file_path}")
+            print(f"Successfully loaded file: {nmv_file_path}")
+            print(f"Successfully loaded file: {ped_file_path}")
         except FileNotFoundError:
-            print(f"错误: 文件 '{file_path}' 不存在")
+            print(f"Error: file not found")
         except json.JSONDecodeError:
-            print(f"错误: 文件 '{file_path}' 不是有效的JSON格式")
+            print(f"Error: file is not a valid JSON format")
         except Exception as e:
-            print(f"加载文件时发生错误: {str(e)}")
+            print(f"Error: {str(e)}")
         
     def load_data(self):
         """加载原始数据"""
@@ -262,7 +272,13 @@ class ScenarioEditor:
 
         return edge_attributes
 
-    def generate_track(self, agent=None, edges: list = None, frame_shift: int = None, reference_id: int = 1):
+    def generate_track(self, 
+                       agent=None, 
+                       edges: list = None, 
+                       frame_shift: int = None, 
+                       reference_id: int = 1, 
+                       offset = None, 
+                       start_frame = None):
         """
         根据agent信息和边属性生成轨迹数据
         
@@ -273,19 +289,20 @@ class ScenarioEditor:
         Returns:
             dict: 生成的轨迹数据
         """
-        if not edges:
-            edges = self.generate_conflict()
+        # if not edges:
+        #     edges = self.generate_conflict()
         if not agent:
             agent = self.generate_agent(1001, edges)
         
-        if not self.fragment_id or not self.frame_data_processed:
-            raise ValueError("请先加载数据")
+        if not self.frame_data_processed:
+            raise ValueError("Please load data first.")
             
         # 获取原始帧数据范围
-        ego_track = self.track_change[self.fragment_id][self.ego_id]
-        start_frame = min(ego_track['track_info']['frame_id'])
-        end_frame = max(ego_track['track_info']['frame_id'])
-        frame_count = end_frame - start_frame + 1
+        if start_frame is None:
+            ego_track = self.track_change[self.fragment_id][self.ego_id]
+            start_frame = min(ego_track['track_info']['frame_id'])
+            # end_frame = max(ego_track['track_info']['frame_id'])
+            # frame_count = end_frame - start_frame + 1
         
         track_data = {
             'track_info': {
@@ -300,7 +317,7 @@ class ScenarioEditor:
                 'width': [],
                 'length': []
             },
-            'anomalies': np.zeros(frame_count, dtype=bool),
+            # 'anomalies': np.zeros(frame_count, dtype=bool),
             'Type': agent.agent_type,
             'Class': agent.agent_class,
             'CrossType': agent.cross_type,
@@ -312,15 +329,15 @@ class ScenarioEditor:
         
         # 根据边属性和冲突类型生成轨迹
         # 找到目标节点的轨迹作为参考
-        target_node_id = None
-        edge_attributes = []
-        if isinstance(edges, list) and len(edges) > 0:
-            edge_attributes = edges
-        else:
-            for child_id, attrs in edges:
-                target_node_id = child_id
-                edge_attributes = attrs
-                break
+        # target_node_id = None
+        # edge_attributes = []
+        # if isinstance(edges, list) and len(edges) > 0:
+        #     edge_attributes = edges
+        # else:
+        #     for child_id, attrs in edges:
+        #         target_node_id = child_id
+        #         edge_attributes = attrs
+        #         break
 
         # # 根据冲突类型生成轨迹
         # conflict_type = None
@@ -339,9 +356,9 @@ class ScenarioEditor:
         # if not conflict_type:
         #     conflict_type = 'following'
         
-        # 如果没有目标节点，使用ego
-        if not target_node_id:
-            target_node_id = self.ego_id
+        # # 如果没有目标节点，使用ego
+        # if not target_node_id:
+        #     target_node_id = self.ego_id
             
         # 获取目标节点的轨迹
         # target_frames = self.frame_data_processed[self.fragment_id]
@@ -360,18 +377,25 @@ class ScenarioEditor:
         #             'heading_rad': target_data.get('heading_rad', 0)
         #         })
                 
-        # if not target_track:
-        #     raise ValueError(f"无法获取目标节点 {target_node_id} 的轨迹数据")
         
         # get reference track
         reference_track_id = 0
-        # if conflict_type in self.conflict_types['head2tail_types']:
+        type = agent.agent_type
         cd = agent.cardinal_direction
-        ct = agent.cross_type[0]
 
-        for k in self.typical_tracks.keys():
-            if k in ct.lower():
-                reference_track_id = self.typical_tracks[k].get(cd, [])
+        if type == 'mv':
+            ct = agent.cross_type[0]
+            for k in self.typical_tracks.keys():
+                if k in ct.lower():
+                    reference_track_id = self.typical_tracks[k].get(cd, [])
+        elif type == 'nmv':
+            ct = agent.cross_type[0]
+            for k in self.typical_tracks_nmv.keys():
+                if k in ct.lower():
+                    reference_track_id = self.typical_tracks_nmv[k].get(cd, [])
+        elif type == 'ped':
+            # Pedestrians always go straight
+            reference_track_id = self.typical_tracks_ped['straight']
 
         if reference_track_id:
             # reference_track_id = random.choice(reference_track_id)
@@ -380,8 +404,8 @@ class ScenarioEditor:
         reference_track = []
         
         if not frame_shift:
-            frame_shift = -20
-        aligned_frame_id = start_frame - frame_shift
+            frame_shift = 0
+        aligned_frame_id = start_frame + frame_shift
         ref_start_frame = min(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
         ref_end_frame = max(self.tp_info[self.typical_tracks_frag][reference_track_id]['State']['frame_id'])
         for frame_id in range(ref_start_frame, ref_end_frame+1):
@@ -397,25 +421,6 @@ class ScenarioEditor:
                     'heading_rad': reference_data.get('heading_rad', 0)
                 })
             aligned_frame_id += 1
-            
-        # offset_x, offset_y = 0, 0
-        # scale_vx, scale_vy = 1.0, 1.0
-        
-        # # 根据冲突类型调整轨迹生成参数
-        # if conflict_type == 'following':
-        #     # 创建时间偏移后的轨迹
-        #     shifted_tracks = []
-        #     if len(target_track) > frame_shift:
-        #         shifted_tracks = target_track[:-frame_shift]  # 截取前面的部分，丢弃最后time_shift帧
-                
-        #         # 调整空间位置（仍然保持在目标车辆后方）
-        #         offset_x, offset_y = -1.0, 0
-        #         scale_vx, scale_vy = 1.0, 1.0
-        #     else:
-        #         # 如果轨迹太短，无法进行时间平移，退回到原来的方法
-        #         shifted_tracks = target_track
-        #         offset_x, offset_y = -5, 0
-        #         scale_vx, scale_vy = 1.0, 1.0
                 
         #     target_track = shifted_tracks
         # elif conflict_type == 'diverging':
@@ -426,10 +431,6 @@ class ScenarioEditor:
         #     # 汇合行为：从不同位置开始，然后靠近
         #     offset_x, offset_y = -10, 5  # 开始位置较远
         #     scale_vx, scale_vy = 1.2, 0.9  # 调整速度使轨迹汇合
-        # elif 'crossing conflict' in conflict_type:
-        #     # 交叉冲突：轨迹相交
-        #     offset_x, offset_y = 5, -8
-        #     scale_vx, scale_vy = 0.9, 1.1
         # elif 'retrograde' in agent.retrograde_type:
         #     # 逆行行为：速度方向相反
         #     offset_x, offset_y = 10, 0
@@ -437,16 +438,13 @@ class ScenarioEditor:
             
         # 根据参考轨迹和参数生成新轨迹
         for ref in reference_track:
+            if offset:
+                new_x = ref['x'] + offset[0]
+                new_y = ref['y'] + offset[1]
+            else:
+                new_x = ref['x']
+                new_y = ref['y']
             
-            # # 计算新位置
-            # new_x = ref['x'] + offset_x
-            # new_y = ref['y'] + offset_y 
-            new_x = ref['x']
-            new_y = ref['y']
-            
-            # new_vx = ref['vx'] * scale_vx
-            # new_vy = ref['vy'] * scale_vy
-
             new_vx = ref['vx']
             new_vy = ref['vy']
             
@@ -456,7 +454,7 @@ class ScenarioEditor:
             new_ax = ref['ax']
             new_ay = ref['ay']
                 
-            # 车辆尺寸（根据agent类型设置）
+            # 车辆尺寸
             if agent.agent_class == 'car':
                 width, length = 1.8, 4.5
             elif agent.agent_class == 'bus' or agent.agent_class == 'truck':
@@ -480,8 +478,8 @@ class ScenarioEditor:
             if key != 'frame_id':  # frame_id通常保持为列表
                 track_data['track_info'][key] = np.array(track_data['track_info'][key])
         
-        # 保存生成的轨迹数据
-        self.save_track(track_data, agent.id)
+        # # 保存生成的轨迹数据
+        # self.save_track(track_data, agent.id)
         
         return track_data
 

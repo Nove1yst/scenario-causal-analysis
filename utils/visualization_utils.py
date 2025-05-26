@@ -200,7 +200,7 @@ def draw_vehicle(ax, vehicle, color, label):
         ax.add_patch(arrow)
 
     # 根据车辆类型绘制不同的图形
-    if agent_type == 'pedestrian':
+    if agent_type == 'ped':
         radius = vehicle.get('radius', 0.5)
         # 绘制圆形表示行人
         circle = plt.Circle((x, y), radius, color=color, fill=True, alpha=0.5)

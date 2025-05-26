@@ -31,7 +31,7 @@ def main():
     edge_attributes_2 = ['converging', 'following']
     # if args.conflict_type:
     #     edge_attributes = [args.conflict_type]
-    frame_shift_list = [25, 40]
+    frame_shift_list = [-25, -40]
 
     new_agent = Agent.from_dict({"id": 1001, 
                                  "agent_type": "mv", 
@@ -52,22 +52,6 @@ def main():
     # 添加新代理并可视化
     print("添加新代理到场景并生成轨迹...")
     editor.add_agents([new_agent, new_agent_2], [edge_attributes, edge_attributes_2], frame_shift_list)
-    
-#     # if new_agent_id:
-#     #     print(f"成功生成新代理 ID: {new_agent_id}")
-#     #     print(f"生成的轨迹数据包含 {len(track_data['track_info']['frame_id'])} 帧")
-#     #     print(f"轨迹类型: {track_data['Type']}")
-#     #     print(f"代理类: {track_data['Class']}")
-#     #     print(f"横穿类型: {track_data['CrossType']}")
-#     #     if 'retrograde_type' in track_data and track_data['retrograde_type']:
-#     #         print(f"逆行类型: {track_data['retrograde_type']}")
-#     #     print(f"方向: {track_data['cardinal direction']}")
-        
-#     #     # 显示异常帧数量
-#     #     anomaly_count = sum(track_data['anomalies'])
-#     #     print(f"异常帧数量: {anomaly_count} ({(anomaly_count / len(track_data['anomalies']) * 100):.1f}%)")
-#     # else:
-#     #     print("添加新代理失败")
     
 if __name__ == "__main__":
     main() 

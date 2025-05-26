@@ -1,1 +1,1 @@
-python generate.py --data_dir ./data/tj --output_dir ./output/tj/dep2_long --cg_file ./scenarios/scenario_4tp.json --save_dir ./output/tj/generated_scenario --fragment_id "8_11_1 R20" --ego_id 1003
+python generate.py --data_dir ./data/tj --output_dir ./output/tj/dep2_long --cg_file ./scenarios/scenario_nmv.json --save_dir ./output/tj/generated_scenario --ego_id 1003

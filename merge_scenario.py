@@ -10,13 +10,11 @@ ego_id_dict = {
 
 if __name__ == "__main__":
     editor = ScenarioEditor(data_dir="./data/tj", output_dir="./output/tj/dep2_long")
-
     editor.load_all(fragment_id="8_11_1 R20", ego_id=60)
 
-    # 合并第二个场景
     merged_tracks = editor.merge_scenes(
         cg_file="output/tj/dep2_long/8_11_1 R20_60/mod_8_11_1 R20_60.json",
         merged_fragment_id="8_11_1 R20",
         merged_ego_id=400,
-        frame_shift=50,
+        frame_shift=-50,
     )
